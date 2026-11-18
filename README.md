@@ -73,11 +73,6 @@ Where:
 │   ├── all_24_geometries_summary.csv        # Comprehensive 24-geometry metrics table
 │   ├── unseen_4_geometries_sampled_data.csv # 2,000 sampled points from unseen shapes
 │   └── sample_trials/                       # Sample 11-column CSV recordings
-│
-└── firmware/                   # Microcontroller firmware
-    ├── README.md               # Hardware wiring & pinout diagrams
-    ├── arduino/                # Arduino stepper pulse generator firmware
-    └── esp8266/                # ESP8266 wireless telemetry firmware
 ```
 
 ---
@@ -134,12 +129,12 @@ Open a browser and navigate to `http://localhost:8080` (or `http://<pi-ip>:8080`
 
 ## 🛠️ Hardware Requirements & Wiring
 
-See [firmware/README.md](firmware/README.md) for detailed schematics, pinouts, and 3D printing STL recommendations:
-* **Host:** Raspberry Pi 5
-* **Camera:** Raspberry Pi Global Shutter Camera (Sony IMX296, 12mm lens)
-* **Barometer:** Honeywell MPRLS Digital Pressure Sensor (I2C address `0x18`)
-* **Reference Rig:** HX711 24-bit ADC + 1 kg / 5 kg Load Cell
-* **Z-Axis Carriage:** NEMA 17 Stepper + TMC2209 driver
+The sensor utilizes a streamlined **single-board embedded architecture** powered entirely by the Raspberry Pi 5 without external microcontrollers:
+* **Host Computer:** Raspberry Pi 5 (4GB/8GB)
+* **Vision Sensor:** Raspberry Pi Global Shutter Camera (Sony IMX296, 12mm lens) via CSI ribbon cable
+* **Differential Barometer:** Honeywell MPRLS Digital Pressure Sensor (I2C address `0x18`, SDA=GPIO 2, SCL=GPIO 3)
+* **Reference Rig:** HX711 24-bit ADC + 1 kg / 5 kg Load Cell (DT=GPIO 5, SCK=GPIO 6)
+* **Z-Axis Carriage:** NEMA 17 Stepper + TMC2209 driver (STEP=GPIO 20, DIR=GPIO 21, EN=GPIO 16)
 
 ---
 
