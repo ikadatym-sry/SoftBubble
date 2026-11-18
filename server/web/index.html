@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bubble 3D Tactile Sensor Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+    body { background: #0a0e14; color: #e1e7ec; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+    /* Main Container */
+    #main-container {
+      flex: 1; position: relative; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at center, #111827 0%, #0a0e14 100%);
+    }
+
+    /* Live Stream Viewer */
+    #streamWrapper {
+      position: relative; max-width: 95vw; max-height: 88vh;
+      border: 1px solid #1f2d3d; border-radius: 10px; overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+      background: #000;
+    }
+    #streamView {
+      display: block; width: 100%; height: auto; object-fit: contain; cursor: crosshair;
+    }
+
+    /* HUD Header Bar */
+    .header-bar {
+      position: absolute; top: 16px; left: 16px; z-index: 10;
+      background: rgba(13, 20, 28, 0.92); backdrop-filter: blur(8px);
+      border: 1px solid #1f2d3d; border-radius: 8px; padding: 10px 16px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      display: flex; align-items: center; gap: 20px;
+    }
+    .title { font-size: 14px; font-weight: 700; color: #38bdf8; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+    .status-dot.disconnected { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+    .subtitle { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    /* Toggle Buttons Bar */
+    .panel-toggle-bar {
+      display: flex; gap: 6px; align-items: center; border-left: 1px solid #233446; padding-left: 16px;
+    }
+    .toggle-btn {
+      background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+      padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+    }
+    .toggle-btn:hover { background: #334155; color: #fff; }
+    .toggle-btn.active {
+      background: rgba(2, 132, 199, 0.22); border-color: #38bdf8; color: #38bdf8;
+    }
+
+    /* Draggable Floating Panels */
+    .draggable-panel {
+      position: absolute; z-index: 10;
+      background: rgba(13, 20, 28, 0.93); backdrop-filter: blur(8px);
+      border: 1px solid #1f2d3d; border-radius: 8px;
+      box-shadow: 0 6px 25px rgba(0, 0, 0, 0.55);
+      user-select: none;
+    }
+    .panel-header {
+      font-size: 13px; font-weight: 700; color: #f1f5f9;
+      border-bottom: 1px solid #233446; padding-bottom: 8px; margin-bottom: 10px;
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: grab;
+    }
+    .panel-header:active { cursor: grabbing; }
+    .drag-handle { color: #64748b; font-size: 13px; margin-right: 4px; cursor: grab; }
+    .panel-close-btn {
+      background: transparent; border: none; color: #64748b; font-size: 13px;
+      cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.15s; line-height: 1;
+    }
+    .panel-close-btn:hover { background: rgba(239, 68, 68, 0.25); color: #ef4444; }
+
+    /* Z-Stage Stepper Control Panel */
+    .stepper-panel {
+      top: 80px; left: 16px; width: 260px; padding: 14px;
+    }
+    .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+    .metric-label { color: #94a3b8; }
+    .metric-val { font-weight: 600; color: #38bdf8; }
+    .metric-highlight { font-size: 15px; color: #22c55e; font-weight: 700; }
+
+    .step-btn {
+      background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+      padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: 600;
+      transition: all 0.15s;
+    }
+    .step-btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+    .step-btn:hover { background: #334155; color: #fff; }
+
+    .btn {
+      background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+      padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn:hover { background: #334155; border-color: #64748b; }
+    .btn-jog-up { background: #1e3a8a; border-color: #3b82f6; color: #ffffff; }
+    .btn-jog-up:hover { background: #2563eb; }
+    .btn-jog-down { background: #065f46; border-color: #10b981; color: #ffffff; }
+    .btn-jog-down:hover { background: #059669; }
+    .btn-danger { background: #991b1b; border-color: #ef4444; color: #ffffff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-primary { background: #0284c7; border-color: #38bdf8; color: #ffffff; }
+    .btn-primary:hover { background: #0369a1; }
+
+    /* 2D Camera Live Feed Panel (Floating & Draggable) */
+    .camera-panel {
+      bottom: 65px; right: 16px; width: 340px; padding: 12px 14px;
+    }
+
+    /* Internal Illumination Control Panel (Floating & Draggable) */
+    .light-panel {
+      top: 80px; left: 290px; width: 280px; padding: 14px;
+    }
+
+    /* Live Telemetry Panel (Top Right) */
+    .telemetry-panel {
+      top: 16px; right: 16px; width: 310px; padding: 14px 16px;
+    }
+    .badge-status {
+      font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; border: 1px solid;
+    }
+    .badge-ready { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1); }
+    .badge-active { color: #f59e0b; border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.15); }
+
+    /* Real-Time Depth & Pressure Chart Panel (Draggable) */
+    .chart-panel {
+      bottom: 65px; left: 16px; width: 380px; padding: 12px 14px;
+    }
+    .chart-stats-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 6px; font-size: 12px;
+    }
+    #depthCanvas {
+      width: 100%; height: 130px; display: block; background: #070b10;
+      border: 1px solid #1a2533; border-radius: 6px; cursor: crosshair;
+    }
+    .chart-axis-info {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 4px; font-size: 10px; color: #64748b;
+    }
+
+    /* Bottom Toolbar */
+    .toolbar {
+      position: absolute; bottom: 16px; right: 16px; z-index: 10;
+      display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+    }
+
+    /* Live Hint Box */
+    .hint-bar {
+      position: absolute; bottom: 16px; left: 16px; z-index: 10;
+      background: rgba(13, 20, 28, 0.85); border: 1px solid #1f2d3d;
+      border-radius: 6px; padding: 6px 12px; font-size: 11px; color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div id="main-container">
+
+    <!-- Header Bar with Toggle Controls -->
+    <div class="header-bar">
+      <div>
+        <div class="title" style="display: flex; align-items: center; gap: 8px;">
+          <span class="status-dot" id="statusDot"></span>
+          BUBBLE 3D TACTILE TEST BENCH (TestVersion1)
+          <span id="recBadge" style="display: none; background: #dc2626; color: white; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 12px; letter-spacing: 0.5px;">🔴 REC 00:00.0</span>
+        </div>
+        <div class="subtitle" id="fpsDisplay">Stream: Connecting... | 0.0 FPS</div>
+      </div>
+      <div class="panel-toggle-bar">
+        <button class="btn btn-record" id="btnToggleRecord" onclick="toggleRecord()" style="background: #dc2626; color: #fff; border: 1px solid #ef4444; font-weight: 800; padding: 5px 14px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Start/Stop Continuous Data Recording (Shortcut: Key [R])">
+          <span id="txtBtnRecord">🔴 REC (Key: R)</span>
+        </button>
+        <button class="btn btn-snapshot" id="btnToggleSnapshot" onclick="captureSnapshot()" style="background: #0284c7; color: #fff; border: 1px solid #38bdf8; font-weight: 800; padding: 5px 14px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Capture High-Res Snapshots (3D Dome & 2D Cam) (Shortcut: Key [X])">
+          <span>📸 SNAPSHOT (Key: X)</span>
+        </button>
+        <button class="toggle-btn active" id="btnToggleLight" onclick="togglePanel('lightPanel', this)">
+          <span>💡 Lighting</span>
+        </button>
+        <button class="toggle-btn" id="btnToggleCamera" onclick="togglePanel('cameraPanel', this)">
+          <span>📷 2D Camera</span>
+        </button>
+        <button class="toggle-btn active" id="btnToggleStepper" onclick="togglePanel('stepperPanel', this)">
+          <span>⚙️ Z-Stage</span>
+        </button>
+        <button class="toggle-btn active" id="btnToggleTelem" onclick="togglePanel('telemetryPanel', this)">
+          <span>📊 Telemetry</span>
+        </button>
+        <button class="toggle-btn active" id="btnToggleGraph" onclick="togglePanel('graphPanel', this)">
+          <span>📈 Depth & ΔP Graph</span>
+        </button>
+        <button class="toggle-btn active" id="btnToggleCircles" onclick="toggleDotCircles(this)" title="Toggle Marker Dot Rings (Trypophobia Safe Mode / Key [O])">
+          <span id="txtToggleCircles">⭕ Circles: ON</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Z-Stage Stepper Rig Control (Draggable & Hideable) -->
+    <div id="stepperPanel" class="draggable-panel stepper-panel">
+      <div class="panel-header" id="stepperHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="drag-handle" title="Drag to move panel">⋮⋮</span>
+          <span>Z-STAGE (STEPPER RIG)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span id="stepperStateBadge" style="color: #22c55e; font-size: 11px;">READY</span>
+          <button class="panel-close-btn" onclick="closePanel('stepperPanel')" title="Hide Panel">✕</button>
+        </div>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Z Position:</span>
+        <span class="metric-highlight" id="valStepperPos">0.000 mm</span>
+      </div>
+      <div class="metric-row" style="align-items: center; margin: 6px 0;">
+        <span class="metric-label">Step Distance:</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <input type="number" id="inputStepSize" step="0.1" min="0.01" max="100.0" value="0.5" 
+                 oninput="onStepInputChange(event)"
+                 style="width: 76px; background: #0f172a; border: 1px solid #38bdf8; border-radius: 4px; color: #38bdf8; font-weight: 700; font-size: 13px; text-align: right; padding: 4px 6px; outline: none;"
+                 title="Step distance in mm">
+          <span style="font-size: 11px; color: #94a3b8;">mm</span>
+        </div>
+      </div>
+      <div class="metric-row" style="align-items: center; margin: 6px 0;">
+        <span class="metric-label">Jog Speed:</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="range" id="sliderSpeed" min="1.0" max="15.0" step="0.5" value="5.0" 
+                 oninput="onSpeedChange(event)"
+                 style="width: 85px; accent-color: #38bdf8; cursor: pointer;">
+          <span id="valSpeedText" style="font-size: 11px; font-weight: 700; color: #38bdf8; min-width: 44px; text-align: right;">5.0 mm/s</span>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+        <button class="btn btn-jog-up" onclick="jogStepper('up')">▲ RETRACT (UP)</button>
+        <button class="btn btn-jog-down" onclick="jogStepper('down')">▼ PRESS (DOWN)</button>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
+        <button class="btn" onclick="homeStepper()" style="background: #1e3a8a; border-color: #60a5fa; color: #93c5fd; font-weight: 700;" title="Return stepper back to 0.00 mm (Home)">🏠 HOME</button>
+        <button class="btn" onclick="zeroStepper()" title="Set current position as 0.00 mm">Set Zero</button>
+        <button class="btn btn-danger" onclick="stopStepper()" title="Emergency Stop">■ STOP</button>
+      </div>
+    </div>
+
+    <!-- LED Internal Illumination Panel (Draggable & Floating) -->
+    <div id="lightPanel" class="draggable-panel light-panel">
+      <div class="panel-header" id="lightHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="drag-handle" title="Drag to move panel">⋮⋮</span>
+          <span>💡 INTERNAL ILLUMINATION</span>
+        </div>
+        <button class="panel-close-btn" onclick="closePanel('lightPanel')" title="Hide Panel">✕</button>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span class="metric-label">Light Mode:</span>
+        <button id="btnAutoLight" class="step-btn active" onclick="toggleAutoLight()" style="padding: 3px 10px; font-weight: 700;">
+          AUTO: <span id="autoLightTxt">ON</span>
+        </button>
+      </div>
+      <div class="metric-row" style="align-items: center; margin-bottom: 8px;">
+        <span class="metric-label">Brightness Level:</span>
+        <span class="metric-highlight" id="valLightLevel" style="color: #38bdf8; font-size: 15px;">25</span>
+      </div>
+      <div style="margin-bottom: 10px;">
+        <input type="range" id="lightSlider" min="0" max="60" value="25"
+               oninput="onLightSliderMove(this.value)" onchange="onLightSliderChange(this.value)"
+               style="width: 100%; accent-color: #38bdf8; cursor: pointer;">
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px;">
+        <button class="step-btn" onclick="setPresetLight(10)">Dim 10</button>
+        <button class="step-btn" onclick="setPresetLight(25)">Std 25</button>
+        <button class="step-btn" onclick="setPresetLight(40)">Mid 40</button>
+        <button class="step-btn" onclick="setPresetLight(55)">Max 55</button>
+      </div>
+      <button class="btn btn-primary" onclick="sendCalibrate()" style="width: 100%; font-size: 11px; padding: 6px;" title="Re-calibrate Dot Grid Template">
+        🎯 RE-CALIBRATE MARKERS (c)
+      </button>
+    </div>
+
+    <!-- Central Stream (Solid 3D Tactile Dome) -->
+    <div id="streamWrapper">
+      <img id="streamView" src="" alt="3D Tactile Dome Streaming...">
+    </div>
+
+    <!-- 2D Camera Live Feed Panel (Draggable & Default Hidden) -->
+    <div id="cameraPanel" class="draggable-panel camera-panel" style="display: none;">
+      <div class="panel-header" id="cameraHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="drag-handle" title="Drag to move panel">⋮⋮</span>
+          <span>📷 2D CAMERA FEED (OPTICAL FLOW)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button onclick="capture2DOnly()" style="background: #0284c7; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; border: 1px solid #38bdf8; cursor: pointer;" title="Save current 2D Camera snapshot">📸 Save 2D</button>
+          <button class="panel-close-btn" onclick="closePanel('cameraPanel')" title="Close Camera Feed">✕</button>
+        </div>
+      </div>
+      <div style="border-radius: 6px; overflow: hidden; border: 1px solid #1f2d3d; background: #000;">
+        <img id="cameraFeedView" src="" style="width: 100%; height: auto; display: block;" alt="2D Camera Live Feed">
+      </div>
+    </div>
+
+    <!-- Tactile Telemetry Card (Draggable & Hideable) -->
+    <div id="telemetryPanel" class="draggable-panel telemetry-panel">
+      <div class="panel-header" id="telemetryHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="drag-handle" title="Drag to move panel">⋮⋮</span>
+          <span>TACTILE TELEMETRY</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span id="telemetryBadge" class="badge-status badge-ready">READY</span>
+          <button class="panel-close-btn" onclick="closePanel('telemetryPanel')" title="Hide Panel">✕</button>
+        </div>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Max Indentation:</span>
+        <span class="metric-highlight" id="valMaxDepth">0.00 mm</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Contact Footprint:</span>
+        <span class="metric-highlight" id="valFootprint" style="color: #38bdf8;">0.0 x 0.0 mm</span>
+      </div>
+
+      <div class="metric-row">
+        <span class="metric-label">Barometer ΔP (MPRLS):</span>
+        <span class="metric-val" id="valPressure" style="color: #fbbf24;">+0.00 hPa</span>
+      </div>
+      <div class="metric-row" style="background: rgba(34, 197, 94, 0.08); padding: 4px 6px; border-radius: 4px; margin: 4px 0;">
+        <span class="metric-label" style="font-weight: 600; color: #4ade80;">Normal Force (F_sensor):</span>
+        <span class="metric-highlight" id="valFSensor" style="color: #4ade80; font-size: 13px;">0.000 N</span>
+      </div>
+      <div class="metric-row" style="background: rgba(59, 130, 246, 0.08); padding: 4px 6px; border-radius: 4px; margin: 4px 0;">
+        <span class="metric-label" style="font-weight: 600; color: #60a5fa;">Load Cell (F_loadcell):</span>
+        <span class="metric-highlight" id="valFLoadcell" style="color: #60a5fa; font-size: 13px;">0.000 N</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Force Error (F_s - F_lc):</span>
+        <span class="metric-val" id="valFError" style="color: #94a3b8;">0.000 N</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Contact Center:</span>
+        <span class="metric-val" id="valContactCenter">X: 0.0, Y: 0.0 mm</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Center Offset:</span>
+        <span class="metric-val" id="valCenterOffset">0.0 mm</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Contact Tilt Angle:</span>
+        <span class="metric-val" id="valTiltAngle" style="color: #38bdf8;">0.0°</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Active Markers:</span>
+        <span class="metric-val" id="valActiveDots">0 / 63 Dots</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Shear Vector:</span>
+        <span class="metric-val" id="valShear" style="color: #6ee7b7;">None</span>
+      </div>
+      <div class="metric-row" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #1f2d3d;">
+        <span class="metric-label">Stiffness Threshold:</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button class="step-btn" onclick="tuneStiffness(-0.5)">-</button>
+          <span class="metric-val" id="valStiffnessThresh">3.0 px</span>
+          <button class="step-btn" onclick="tuneStiffness(+0.5)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-Time Depth & Pressure Dynamics Graph (Draggable & Default Open) -->
+    <div id="graphPanel" class="draggable-panel chart-panel">
+      <div class="panel-header" id="graphHeader">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="drag-handle" title="Drag to move panel">⋮⋮</span>
+          <span>DEPTH & PRESSURE DYNAMICS</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button class="step-btn" onclick="clearChartHistory()" title="Clear history">Reset</button>
+          <button class="panel-close-btn" onclick="closePanel('graphPanel')" title="Hide Panel">✕</button>
+        </div>
+      </div>
+      <div class="chart-stats-row">
+        <span style="color: #38bdf8; font-weight: 700;">Depth: <span id="chartDepthVal">0.00 mm</span></span>
+        <span style="color: #fbbf24; font-weight: 700;">ΔP: <span id="chartPressureVal">+0.00 hPa</span></span>
+      </div>
+      <canvas id="depthCanvas" width="352" height="130"></canvas>
+      <div class="chart-axis-info">
+        <span style="color: #38bdf8;">Left: Depth (mm)</span>
+        <span>-30s ──── Time ──── Now</span>
+        <span style="color: #fbbf24;">Right: ΔP (hPa)</span>
+      </div>
+    </div>
+
+    <!-- Hint Bar (Bottom Left) -->
+    <div class="hint-bar">
+      <span>🖱️ Drag panels to reposition | Keys: [X]=Snapshot, [R]=Record, [W/▲]=Up, [S/▼]=Down, [H]=Home, [O]=Circles, [Space]=Stop</span>
+    </div>
+
+    <!-- Control Toolbar (Bottom Right) -->
+    <div class="toolbar">
+      <button class="btn" id="btnBottomRecord" onclick="toggleRecord()" style="background: #dc2626; border-color: #ef4444; color: white; font-weight: 800;" title="Shortcut: Key [R]">🔴 Record Test (r)</button>
+      <button class="btn" id="btnBottomSnapshot" onclick="captureSnapshot()" style="background: #0284c7; border-color: #38bdf8; color: white; font-weight: 800;" title="Capture 3D Dome & 2D Cam Snapshots (Shortcut: Key [X])">📸 Capture Snapshot (x)</button>
+      <button class="btn" onclick="reset3DView('iso')">Isometric (i)</button>
+      <button class="btn" onclick="reset3DView('top')">Top View (t)</button>
+      <button class="btn" onclick="reset3DView('side')">Side Profile (p)</button>
+      <button class="btn btn-primary" onclick="sendCalibrate()">Recalibrate Baseline (c)</button>
+    </div>
+
+  </div>
+
+  <script>
+    const streamImg = document.getElementById('streamView');
+    let ws = null;
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let selectedStepMm = 0.5;
+
+    // Highest z-index tracking for window management
+    let highestZ = 20;
+
+    // Interactive 3D Rotation Drag on Stream
+    let isDragging3D = false;
+    let lastX = 0, lastY = 0;
+
+    streamImg.addEventListener('mousedown', (e) => {
+      isDragging3D = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging3D && ws && ws.readyState === WebSocket.OPEN) {
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        ws.send(JSON.stringify({ cmd: 'orbit_3d', dx: dx, dy: dy }));
+      }
+    });
+
+    window.addEventListener('mouseup', () => { isDragging3D = false; });
+
+    // --- Panel Dragging System (Vanilla JS) ---
+    function makeDraggable(panelId, headerId) {
+      const panel = document.getElementById(panelId);
+      const header = document.getElementById(headerId);
+      if (!panel || !header) return;
+
+      let isDragging = false;
+      let startX = 0, startY = 0;
+      let initLeft = 0, initTop = 0;
+
+      const onStart = (clientX, clientY) => {
+        isDragging = true;
+        startX = clientX;
+        startY = clientY;
+        const rect = panel.getBoundingClientRect();
+        initLeft = rect.left;
+        initTop = rect.top;
+        panel.style.left = initLeft + 'px';
+        panel.style.top = initTop + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+        panel.style.zIndex = ++highestZ;
+        header.style.cursor = 'grabbing';
+      };
+
+      const onMove = (clientX, clientY) => {
+        if (!isDragging) return;
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+        let newLeft = initLeft + dx;
+        let newTop = initTop + dy;
+        const maxL = window.innerWidth - panel.offsetWidth - 8;
+        const maxT = window.innerHeight - panel.offsetHeight - 8;
+        newLeft = Math.max(8, Math.min(newLeft, maxL));
+        newTop = Math.max(8, Math.min(newTop, maxT));
+        panel.style.left = newLeft + 'px';
+        panel.style.top = newTop + 'px';
+      };
+
+      const onEnd = () => {
+        if (isDragging) {
+          isDragging = false;
+          header.style.cursor = 'grab';
+        }
+      };
+
+      header.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        onStart(e.clientX, e.clientY);
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
+      window.addEventListener('mouseup', onEnd);
+
+      // Touch events
+      header.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
+        const touch = e.touches[0];
+        onStart(touch.clientX, touch.clientY);
+      }, { passive: false });
+      window.addEventListener('touchmove', (e) => {
+        if (isDragging) onMove(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
+      window.addEventListener('touchend', onEnd);
+    }
+
+    makeDraggable('lightPanel', 'lightHeader');
+    makeDraggable('cameraPanel', 'cameraHeader');
+    makeDraggable('stepperPanel', 'stepperHeader');
+    makeDraggable('telemetryPanel', 'telemetryHeader');
+    makeDraggable('graphPanel', 'graphHeader');
+
+    // --- Panel Show/Hide Toggles ---
+    function togglePanel(panelId, btn) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      const isHidden = (panel.style.display === 'none');
+      panel.style.display = isHidden ? 'block' : 'none';
+      if (btn) {
+        if (isHidden) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    }
+
+    function closePanel(panelId) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      panel.style.display = 'none';
+      if (panelId === 'lightPanel') {
+        const btn = document.getElementById('btnToggleLight');
+        if (btn) btn.classList.remove('active');
+      } else if (panelId === 'cameraPanel') {
+        const btn = document.getElementById('btnToggleCamera');
+        if (btn) btn.classList.remove('active');
+      } else if (panelId === 'stepperPanel') {
+        document.getElementById('btnToggleStepper').classList.remove('active');
+      } else if (panelId === 'telemetryPanel') {
+        document.getElementById('btnToggleTelem').classList.remove('active');
+      } else if (panelId === 'graphPanel') {
+        document.getElementById('btnToggleGraph').classList.remove('active');
+      }
+    }
+
+    // --- LED Illumination Controller Functions ---
+    let isAutoLight = true;
+
+    function toggleAutoLight() {
+      isAutoLight = !isAutoLight;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'set_auto_light', val: isAutoLight }));
+      }
+      updateLightUI(isAutoLight);
+    }
+
+    function updateLightUI(active) {
+      const btn = document.getElementById('btnAutoLight');
+      const txt = document.getElementById('autoLightTxt');
+      if (active) {
+        btn.classList.add('active');
+        txt.innerText = 'ON';
+      } else {
+        btn.classList.remove('active');
+        txt.innerText = 'OFF';
+      }
+    }
+
+    function onLightSliderMove(val) {
+      document.getElementById('valLightLevel').innerText = val;
+      if (isAutoLight) {
+        isAutoLight = false;
+        updateLightUI(false);
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'set_brightness', val: parseInt(val) }));
+      }
+    }
+
+    function onLightSliderChange(val) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'set_brightness', val: parseInt(val) }));
+      }
+    }
+
+    function setPresetLight(val) {
+      isAutoLight = false;
+      updateLightUI(false);
+      document.getElementById('lightSlider').value = val;
+      document.getElementById('valLightLevel').innerText = val;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'set_brightness', val: val }));
+      }
+    }
+
+    // --- Real-Time Dual-Axis Depth & Pressure Dynamics Chart ---
+    const chartCanvas = document.getElementById('depthCanvas');
+    const ctx = chartCanvas.getContext('2d');
+    const chartData = []; // [{ t: sec, depth: mm, dp: hpa }]
+    const CHART_WINDOW_SEC = 30.0;
+    const sessionStartTime = performance.now();
+
+    function clearChartHistory() {
+      chartData.length = 0;
+      renderChart();
+    }
+
+    function addChartData(depthMm, deltaPHpa) {
+      const t = (performance.now() - sessionStartTime) / 1000.0;
+      chartData.push({ t: t, depth: depthMm, dp: deltaPHpa });
+      while (chartData.length > 0 && (t - chartData[0].t) > CHART_WINDOW_SEC) {
+        chartData.shift();
+      }
+      renderChart();
+    }
+
+    function renderChart() {
+      if (chartCanvas.offsetParent === null) return; // Panel hidden
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = chartCanvas.clientWidth;
+      const h = chartCanvas.clientHeight;
+      if (chartCanvas.width !== w * dpr || chartCanvas.height !== h * dpr) {
+        chartCanvas.width = w * dpr;
+        chartCanvas.height = h * dpr;
+      }
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      const padL = 36, padR = 36, padT = 12, padB = 20;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+
+      // Determine dynamic axis ranges
+      let maxDepthObserved = 1.0;
+      let maxDpObserved = 2.0;
+      for (const d of chartData) {
+        if (d.depth > maxDepthObserved) maxDepthObserved = d.depth;
+        if (d.dp > maxDpObserved) maxDpObserved = d.dp;
+      }
+      const yMaxDepth = Math.max(2.5, Math.ceil(maxDepthObserved * 1.2 * 2) / 2);
+      const yMaxDp = Math.max(5.0, Math.ceil(maxDpObserved * 1.2));
+
+      // Draw subtle horizontal grid lines
+      ctx.strokeStyle = '#1a2533';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#64748b';
+      ctx.font = '9px monospace';
+
+      const gridSteps = 4;
+      for (let i = 0; i <= gridSteps; i++) {
+        const y = padT + (plotH / gridSteps) * i;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+
+        const depthVal = (yMaxDepth * (gridSteps - i) / gridSteps).toFixed(1);
+        const dpVal = (yMaxDp * (gridSteps - i) / gridSteps).toFixed(0);
+
+        // Left label: Depth
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(depthVal, padL - 4, y + 3);
+
+        // Right label: Pressure ΔP
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('+' + dpVal, w - padR + 4, y + 3);
+      }
+
+      if (chartData.length < 2) {
+        ctx.restore();
+        return;
+      }
+
+      const curT = chartData[chartData.length - 1].t;
+      const minT = Math.max(0, curT - CHART_WINDOW_SEC);
+
+      const getX = (t) => padL + ((t - minT) / CHART_WINDOW_SEC) * plotW;
+      const getYDepth = (val) => padT + (1.0 - Math.min(1.0, Math.max(0.0, val / yMaxDepth))) * plotH;
+      const getYDp = (val) => padT + (1.0 - Math.min(1.0, Math.max(0.0, val / yMaxDp))) * plotH;
+
+      // 1. Draw Depth Curve with Cyan Gradient Fill
+      ctx.beginPath();
+      ctx.moveTo(getX(chartData[0].t), getYDepth(chartData[0].depth));
+      for (let i = 1; i < chartData.length; i++) {
+        ctx.lineTo(getX(chartData[i].t), getYDepth(chartData[i].depth));
+      }
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.0;
+      ctx.stroke();
+
+      // Fill area under Depth
+      ctx.lineTo(getX(chartData[chartData.length - 1].t), padT + plotH);
+      ctx.lineTo(getX(chartData[0].t), padT + plotH);
+      ctx.closePath();
+      const gradDepth = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      gradDepth.addColorStop(0, 'rgba(56, 189, 248, 0.28)');
+      gradDepth.addColorStop(1, 'rgba(56, 189, 248, 0.00)');
+      ctx.fillStyle = gradDepth;
+      ctx.fill();
+
+      // 2. Draw Pressure ΔP Curve with Amber Gradient Fill
+      ctx.beginPath();
+      ctx.moveTo(getX(chartData[0].t), getYDp(chartData[0].dp));
+      for (let i = 1; i < chartData.length; i++) {
+        ctx.lineTo(getX(chartData[i].t), getYDp(chartData[i].dp));
+      }
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      // Fill area under Pressure
+      ctx.lineTo(getX(chartData[chartData.length - 1].t), padT + plotH);
+      ctx.lineTo(getX(chartData[0].t), padT + plotH);
+      ctx.closePath();
+      const gradDp = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+      gradDp.addColorStop(0, 'rgba(251, 191, 36, 0.20)');
+      gradDp.addColorStop(1, 'rgba(251, 191, 36, 0.00)');
+      ctx.fillStyle = gradDp;
+      ctx.fill();
+
+      // Draw current indicator pulses
+      const last = chartData[chartData.length - 1];
+      const endX = getX(last.t);
+      const endYDepth = getYDepth(last.depth);
+      const endYDp = getYDp(last.dp);
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(endX, endYDepth, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(endX, endYDp, 3.0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // --- Connect WebSocket & Dashboard Update ---
+    function connectWS() {
+      const loc = window.location;
+      const wsUrl = (loc.protocol === 'https:' ? 'wss://' : 'ws://') + loc.host + '/ws';
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('statusDot').className = 'status-dot';
+        if (!showDotCircles) {
+          ws.send(JSON.stringify({ cmd: 'toggle_dot_circles', enabled: false }));
+        }
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        updateDashboard(data);
+
+        frameCount++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+          const fps = ((frameCount * 1000) / (now - lastTime)).toFixed(1);
+          document.getElementById('fpsDisplay').innerText = `Engine: ${fps} FPS | 63 Dots Active`;
+          frameCount = 0;
+          lastTime = now;
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statusDot').className = 'status-dot disconnected';
+        document.getElementById('fpsDisplay').innerText = 'Stream: Reconnecting...';
+        setTimeout(connectWS, 1000);
+      };
+    }
+
+    function updateDashboard(msg) {
+      window._latestMsg = msg;
+      // 1. Update Video Stream: Default shows 3D Dome only
+      if (msg.dome_base64) {
+        streamImg.src = "data:image/jpeg;base64," + msg.dome_base64;
+      } else if (msg.combined_base64) {
+        streamImg.src = "data:image/jpeg;base64," + msg.combined_base64;
+      }
+
+      // Update 2D Camera feed in floating panel if active
+      const camPanel = document.getElementById('cameraPanel');
+      if (camPanel && camPanel.style.display !== 'none' && msg.cam_base64) {
+        const camView = document.getElementById('cameraFeedView');
+        if (camView) camView.src = "data:image/jpeg;base64," + msg.cam_base64;
+      }
+
+      // 2. Update Telemetry
+      const telem = msg.telemetry;
+      if (telem) {
+        const badge = document.getElementById('telemetryBadge');
+        if (telem.contact_active) {
+          badge.className = 'badge-status badge-active';
+          badge.innerText = 'CONTACT ACTIVE';
+        } else {
+          badge.className = 'badge-status badge-ready';
+          badge.innerText = 'READY';
+        }
+
+        const depth = telem.max_depth_mm || 0.0;
+        document.getElementById('valMaxDepth').innerText = depth.toFixed(2) + ' mm';
+        document.getElementById('chartDepthVal').innerText = depth.toFixed(2) + ' mm';
+
+        const lVal = telem.corrected_l_mm || telem.footprint_l_mm || 0.0;
+        const wVal = telem.corrected_w_mm || telem.footprint_w_mm || 0.0;
+        if (lVal > 0) {
+          document.getElementById('valFootprint').innerText = `${lVal.toFixed(1)} x ${wVal.toFixed(1)} mm`;
+        } else {
+          document.getElementById('valFootprint').innerText = '0.0 x 0.0 mm';
+        }
+
+        // Pressure & Force Telemetry
+        const dp = telem.delta_p_hpa || 0.0;
+        const pVal = telem.pressure_hpa || 1013.25;
+        document.getElementById('valPressure').innerText = `${dp >= 0 ? '+' : ''}${dp.toFixed(2)} hPa (${pVal.toFixed(1)} hPa)`;
+        document.getElementById('chartPressureVal').innerText = `${dp >= 0 ? '+' : ''}${dp.toFixed(2)} hPa`;
+
+        const fSensor = telem.f_sensor_n !== undefined ? telem.f_sensor_n : 0.0;
+        const fLoadcell = telem.f_loadcell_n !== undefined ? telem.f_loadcell_n : 0.0;
+        const fError = telem.f_error_n !== undefined ? telem.f_error_n : 0.0;
+        if (document.getElementById('valFSensor')) {
+          document.getElementById('valFSensor').innerText = fSensor.toFixed(3) + ' N';
+        }
+        const elLoadcell = document.getElementById('valFLoadcell');
+        if (elLoadcell) {
+          elLoadcell.innerText = fLoadcell.toFixed(3) + ' N';
+          if (telem.overforce_alert || fLoadcell >= 4.0) {
+            elLoadcell.style.color = '#ef4444';
+            elLoadcell.style.fontWeight = 'bold';
+          } else {
+            elLoadcell.style.color = '';
+            elLoadcell.style.fontWeight = '';
+          }
+        }
+        if (document.getElementById('valFError')) {
+          document.getElementById('valFError').innerText = (fError >= 0 ? '+' : '') + fError.toFixed(3) + ' N';
+        }
+
+        document.getElementById('valContactCenter').innerText = `X: ${telem.center_x_mm >= 0 ? '+' : ''}${telem.center_x_mm.toFixed(1)}, Y: ${telem.center_y_mm >= 0 ? '+' : ''}${telem.center_y_mm.toFixed(1)} mm`;
+        document.getElementById('valCenterOffset').innerText = telem.center_r_mm.toFixed(1) + ' mm';
+        const tiltDeg = telem.contact_tilt_deg || 0.0;
+        document.getElementById('valTiltAngle').innerText = tiltDeg.toFixed(1) + '°';
+        document.getElementById('valActiveDots').innerText = `${telem.active_count} / ${telem.total_dots} Dots`;
+        document.getElementById('valShear').innerText = telem.contact_active ? telem.shear_desc : 'None';
+
+        // Feed Real-Time Graph
+        addChartData(depth, dp);
+      }
+
+      // 3. Update Stepper Position & State
+      if (msg.stepper) {
+        const p = msg.stepper.position_mm;
+        document.getElementById('valStepperPos').innerText = (p >= 0 ? '+' : '') + p.toFixed(3) + ' mm';
+        const sBadge = document.getElementById('stepperStateBadge');
+        if (telem.overforce_alert) {
+          sBadge.innerText = '🚨 OVERFORCE >= 4N!';
+          sBadge.style.color = '#ef4444';
+        } else if (msg.stepper.is_recovering) {
+          sBadge.innerText = '🚨 SAFETY RETURN...';
+          sBadge.style.color = '#ef4444';
+        } else if (msg.stepper.top_limit || msg.stepper.bottom_limit) {
+          sBadge.innerText = msg.stepper.top_limit ? '🛑 TOP LIMIT HIT!' : '🛑 BOTTOM LIMIT HIT!';
+          sBadge.style.color = '#ef4444';
+        } else if (msg.stepper.is_moving) {
+          sBadge.innerText = 'MOVING...';
+          sBadge.style.color = '#f59e0b';
+        } else {
+          sBadge.innerText = 'READY';
+          sBadge.style.color = '#22c55e';
+        }
+      }
+
+      // 4. Update Stiffness Display
+      if (msg.stiffness_thresh) {
+        document.getElementById('valStiffnessThresh').innerText = msg.stiffness_thresh.toFixed(1) + ' px';
+      }
+
+      // 5. Update Light Display
+      if (msg.light) {
+        if (isAutoLight) {
+          document.getElementById('valLightLevel').innerText = msg.light.brightness;
+          document.getElementById('lightSlider').value = msg.light.brightness;
+        }
+      }
+
+      // 6. Update Recording Telemetry & UI
+      if (telem && telem.recording) {
+        const rec = telem.recording;
+        const recBadge = document.getElementById('recBadge');
+        const btnToggleRec = document.getElementById('btnToggleRecord');
+        const txtBtnRec = document.getElementById('txtBtnRecord');
+        const btnBottomRec = document.getElementById('btnBottomRecord');
+
+        if (rec.is_recording) {
+          recBadge.style.display = 'inline-block';
+          recBadge.innerText = `🔴 REC ${rec.time_str} (${rec.samples} pts)`;
+          if (btnToggleRec) {
+            btnToggleRec.style.background = '#15803d';
+            btnToggleRec.style.borderColor = '#22c55e';
+            txtBtnRec.innerText = `⏹️ STOP (${rec.time_str})`;
+          }
+          if (btnBottomRec) {
+            btnBottomRec.innerText = `⏹️ STOP REC (${rec.time_str})`;
+            btnBottomRec.style.background = '#15803d';
+            btnBottomRec.style.borderColor = '#22c55e';
+          }
+        } else {
+          recBadge.style.display = 'none';
+          if (btnToggleRec) {
+            btnToggleRec.style.background = '#dc2626';
+            btnToggleRec.style.borderColor = '#ef4444';
+            txtBtnRec.innerText = `🔴 REC (Key: R)`;
+          }
+          if (btnBottomRec) {
+            btnBottomRec.innerText = `🔴 Record Test (r)`;
+            btnBottomRec.style.background = '#dc2626';
+            btnBottomRec.style.borderColor = '#ef4444';
+          }
+        }
+      }
+    }
+
+    // Stepper Commands
+    function getStepSize() {
+      const inp = document.getElementById('inputStepSize');
+      if (inp) {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val) && val > 0) return val;
+      }
+      return selectedStepMm || 0.5;
+    }
+
+    function onStepInputChange(e) {
+      const val = parseFloat(e.target.value);
+      if (!isNaN(val) && val > 0) {
+        selectedStepMm = val;
+      }
+    }
+
+    let selectedJogSpeed = 5.0;
+
+    function onSpeedChange(e) {
+      selectedJogSpeed = parseFloat(e.target.value) || 5.0;
+      const lbl = document.getElementById('valSpeedText');
+      if (lbl) lbl.innerText = selectedJogSpeed.toFixed(1) + ' mm/s';
+    }
+
+    function jogStepper(dir) {
+      const stepMm = getStepSize();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'stepper_jog', direction: dir, mm: stepMm, speed: selectedJogSpeed }));
+      }
+    }
+
+    function stopStepper() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'stepper_stop' }));
+      }
+    }
+
+    function zeroStepper() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'stepper_zero' }));
+      }
+    }
+
+    function homeStepper() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'stepper_home', speed: Math.max(3.0, selectedJogSpeed) }));
+      }
+    }
+
+    // Keyboard controls: ArrowUp/W = Retract, ArrowDown/S = Press Down, Space = Emergency Stop, H = Home
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+        jogStepper('down');
+      } else if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+        jogStepper('up');
+      } else if (e.code === 'KeyH') {
+        homeStepper();
+      } else if (e.code === 'Space') {
+        stopStepper();
+      } else if (e.code === 'KeyR') {
+        toggleRecord();
+      } else if (e.code === 'KeyI') {
+        reset3DView('iso');
+      } else if (e.code === 'KeyT') {
+        reset3DView('top');
+      } else if (e.code === 'KeyP') {
+        reset3DView('side');
+      } else if (e.code === 'KeyC') {
+        sendCalibrate();
+      } else if (e.code === 'KeyO') {
+        toggleDotCircles(document.getElementById('btnToggleCircles'));
+      } else if (e.code === 'KeyX') {
+        captureSnapshot();
+      }
+    });
+
+    function toggleRecord() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'toggle_record' }));
+      }
+    }
+
+    let showDotCircles = true;
+    function toggleDotCircles(btn) {
+      showDotCircles = !showDotCircles;
+      const btnEl = btn || document.getElementById('btnToggleCircles');
+      const txt = document.getElementById('txtToggleCircles');
+      if (showDotCircles) {
+        if (btnEl) btnEl.classList.add('active');
+        if (txt) txt.textContent = '⭕ Circles: ON';
+      } else {
+        if (btnEl) btnEl.classList.remove('active');
+        if (txt) txt.textContent = '🙈 Circles: OFF';
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'toggle_dot_circles', enabled: showDotCircles }));
+      }
+    }
+
+    function sendCalibrate() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'calibrate' }));
+      }
+    }
+
+    function reset3DView(mode) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'reset_view', mode: mode }));
+      }
+    }
+
+    function captureSnapshot() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'capture_snapshot' }));
+      }
+
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+      if (window._latestMsg && window._latestMsg.combined_base64) {
+        // Download Single Combined Image (Side-by-Side: 2D Camera + 3D Dome)
+        downloadBase64(window._latestMsg.combined_base64, `snapshot_combined_${ts}.jpg`);
+      } else if (streamImg && streamImg.src && streamImg.src.startsWith('data:image')) {
+        downloadBase64(streamImg.src.replace('data:image/jpeg;base64,', ''), `snapshot_tactile_${ts}.jpg`);
+      }
+
+      showToast('📸 Snapshot Saved as Single Image (2D Camera + 3D Dome Side-by-Side)!');
+    }
+
+    function capture2DOnly() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+      if (window._latestMsg && window._latestMsg.cam_base64) {
+        downloadBase64(window._latestMsg.cam_base64, `snapshot_2d_cam_${ts}.jpg`);
+      } else {
+        const camView = document.getElementById('cameraFeedView');
+        if (camView && camView.src) {
+          const a = document.createElement('a');
+          a.href = camView.src;
+          a.download = `snapshot_2d_cam_${ts}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      }
+      showToast('📷 2D Camera Snapshot Downloaded!');
+    }
+
+    function downloadBase64(b64, filename) {
+      const a = document.createElement('a');
+      a.href = "data:image/jpeg;base64," + b64;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function showToast(text) {
+      let toast = document.getElementById('uiToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'uiToast';
+        toast.style.position = 'fixed';
+        toast.style.top = '70px';
+        toast.style.left = '50%';
+        toast.style.transform = 'translateX(-50%)';
+        toast.style.background = '#0284c7';
+        toast.style.color = '#ffffff';
+        toast.style.padding = '10px 22px';
+        toast.style.borderRadius = '8px';
+        toast.style.fontWeight = '800';
+        toast.style.fontSize = '14px';
+        toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
+        toast.style.zIndex = '999999';
+        toast.style.transition = 'opacity 0.3s ease';
+        toast.style.pointerEvents = 'none';
+        document.body.appendChild(toast);
+      }
+      toast.innerText = text;
+      toast.style.opacity = '1';
+      toast.style.display = 'block';
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.style.display = 'none', 300);
+      }, 2400);
+    }
+
+    function tuneStiffness(delta) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'tune_stiffness', delta: delta }));
+      }
+    }
+
+    connectWS();
+  </script>
+</body>
+</html>

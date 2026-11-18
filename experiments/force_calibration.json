@@ -1,0 +1,14 @@
+{
+  "alpha_pneumatic": 5.85,
+  "beta_elastic_n_per_mm": 0.0,
+  "gamma_offset_n": 0.1,
+  "r2_score": 0.945,
+  "rmse_n": 0.108,
+  "mae_n": 0.081,
+  "calibrated_samples": 307,
+  "operating_force_range_n": [
+    0.3,
+    3.5
+  ],
+  "calibrated_at": "2026-10-30 15:30:00"
+}

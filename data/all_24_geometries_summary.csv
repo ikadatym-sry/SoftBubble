@@ -1,0 +1,25 @@
+Shape_Geometry,Category,Trials,Total_Samples,R2_Score_pct,MAE_N,RMSE_N,Max_Error_N
+circular_dome36.5-15,Extended Complex,5,4722,73.76,0.5578,0.6809,1.6753
+cylinder,Baseline,5,3714,99.3,0.0883,0.1136,0.5233
+cylinder35,Extended Complex,5,3127,85.1,0.4176,0.5198,1.4933
+cylinder45,Extended Complex,5,2892,84.58,0.4189,0.5292,2.0328
+flat,Baseline,5,2925,98.94,0.1081,0.1368,0.7531
+heart28x30.5,Extended Complex,5,2407,65.17,0.707,0.784,2.5522
+hexagon,Baseline,5,4659,82.96,0.4717,0.5697,1.3617
+hexagon13,Extended Complex,5,3745,91.43,0.3398,0.4041,1.1746
+hexagon25,Extended Complex,5,3366,81.01,0.4583,0.5774,1.6702
+hexagon35,Extended Complex,5,2763,85.93,0.4108,0.499,1.7695
+hollow_cylinder25,Extended Complex,5,3576,77.73,0.5239,0.6501,1.6254
+obtuse50-40,Extended Complex,5,2922,79.31,0.4955,0.6215,1.6749
+sphere,Baseline,5,6259,96.16,0.2344,0.2717,0.8365
+square,Baseline,5,3606,99.29,0.0876,0.1138,0.6012
+square29,Extended Complex,5,3150,82.24,0.4636,0.5749,1.6983
+square30,Extended Complex,5,3099,85.01,0.4355,0.5388,1.7259
+square34,Extended Complex,5,3601,83.54,0.444,0.5507,1.5461
+square40,Extended Complex,5,2974,81.47,0.4562,0.5877,1.815
+square45,Extended Complex,5,2876,81.72,0.4582,0.5754,1.8147
+square60.5,Extended Complex,5,3326,84.01,0.44,0.5241,1.5339
+square_dome24-12,Extended Complex,5,4422,85.31,0.4264,0.5144,1.4027
+star27x29,Extended Complex,5,2459,70.87,0.6586,0.7131,1.6184
+triangle63.5-67,Extended Complex,5,3772,83.5,0.4549,0.5216,1.4498
+triangle_dome25-10,Extended Complex,5,5123,94.63,0.228,0.3073,1.017
