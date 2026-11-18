@@ -15,24 +15,26 @@ import sys
 from pathlib import Path
 
 WS_URL = "ws://localhost:8080/ws"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-async def run_trials(shape: str, num_trials: int = 5, start_trial: int = 1):
+
+async def run_trials(shape: str, num_trials: int = 5, start_trial: int = 1, ws_url: str = WS_URL):
     import websockets
 
     print("=" * 80)
     print(f"  🚀 AUTONOMOUS BENCHMARK: [{shape.upper()}] - {num_trials} TRIALS")
-    print("  Force Targets: 0.5 N, 1.0 N, 2.0 N, 3.0 N, 4.0 N, 5.0 N (Hold 1.0s each)")
+    print("  Force Targets: 0.5 N, 1.0 N, 2.0 N, 3.0 N, 4.0 N, 5.0 N (Hold 0.45s each)")
     print("  Watchdog Cutoff: 5.8 N | Hardware Interlock: 6.5 N")
     print("=" * 80)
 
     # Automatically create shape directory and dimension tag file
-    shape_dir = Path(__file__).resolve().parent / "results" / shape
+    shape_dir = REPO_ROOT / "results" / shape
     shape_dir.mkdir(parents=True, exist_ok=True)
     tag_file = shape_dir / f"{shape}.txt"
     if not tag_file.exists():
         tag_file.touch()
 
-    async with websockets.connect(WS_URL) as ws:
+    async with websockets.connect(ws_url) as ws:
         latest_telem = {}
         latest_stepper = {}
         emergency_abort = False
@@ -162,13 +164,13 @@ async def run_trials(shape: str, num_trials: int = 5, start_trial: int = 1):
 
                     # Auto-capture strictly 1 pure raw unannotated photo per shape (during Trial 1 @ 2.0 N)
                     if trial_idx == 1 and target_f == 2.0 and not raw_photo_captured:
-                        raw_save_path = f"/home/bubble/Desktop/TestVersion1/results/{shape}/raw_{shape}_pressed.jpg"
+                        raw_save_path = f"{shape}/raw_{shape}_pressed.jpg"
                         await ws.send(json.dumps({
                             "cmd": "capture_snapshot",
                             "raw_path": raw_save_path
                         }))
                         raw_photo_captured = True
-                        print(f"    📸 [Auto-RAW] Captured 1 clean unannotated photo -> {raw_save_path}")
+                        print(f"    📸 [Auto-RAW] Captured 1 clean unannotated photo -> results/{raw_save_path}")
 
                     await asyncio.sleep(0.45)
 
@@ -207,6 +209,7 @@ if __name__ == "__main__":
     parser.add_argument("--shape", type=str, default="flat", help="Shape name (flat, sphere, cylinder, square)")
     parser.add_argument("--trials", type=int, default=5, help="Number of trials / end trial index (default: 5)")
     parser.add_argument("--start-trial", type=int, default=1, help="Starting trial index (default: 1)")
+    parser.add_argument("--ws-url", type=str, default=WS_URL, help="WebSocket server URL")
     args = parser.parse_args()
 
-    asyncio.run(run_trials(args.shape, args.trials, args.start_trial))
+    asyncio.run(run_trials(args.shape, args.trials, args.start_trial, args.ws_url))

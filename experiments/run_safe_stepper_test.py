@@ -2,20 +2,18 @@
 """
 Autonomous Safe Stepper Force & Hold Benchmark
 -----------------------------------------------
-Controls the stepper rig via serverTest.py WebSocket.
+Controls the stepper rig via server/server.py WebSocket.
 Steps down carefully, searches for contact, presses up to ~3.5 N (Hard limit 4.0 N),
 holds at contact to observe sensor relaxation/drift, and retracts to Home.
 """
 
+import argparse
 import asyncio
 import json
-import time
-import sys
-from pathlib import Path
 
 WS_URL = "ws://localhost:8080/ws"
 
-async def run_benchmark():
+async def run_benchmark(ws_url: str = WS_URL):
     import websockets
 
     print("=" * 75)
@@ -23,7 +21,7 @@ async def run_benchmark():
     print("  Ceiling Force: 4.0 N max | Hold Duration: 6.0s | Speed: Controlled")
     print("=" * 75)
 
-    async with websockets.connect(WS_URL) as ws:
+    async with websockets.connect(ws_url) as ws:
         latest_telem = {}
         latest_stepper = {}
         is_running = True
@@ -235,8 +233,11 @@ async def run_benchmark():
             print(f"   Mean Error:      {sum(x['err'] for x in hold_logs_2)/len(hold_logs_2):+.3f} N")
 
         print("=" * 80)
-        print("📁 Raw 10-column data saved to TestVersion1/results/")
+        print("📁 Raw 11-column data saved to results/")
         print("=" * 80)
 
 if __name__ == "__main__":
-    asyncio.run(run_benchmark())
+    parser = argparse.ArgumentParser(description="Safe Stepper Press & Hold Test")
+    parser.add_argument("--ws-url", type=str, default=WS_URL, help="WebSocket server URL")
+    args = parser.parse_args()
+    asyncio.run(run_benchmark(args.ws_url))

@@ -1,9 +1,16 @@
 """
 Z-Axis Stepper Motor Controller for Raspberry Pi 5.
-Controls the NEMA stepper via the native libgpiod runner.
-PUL: GPIO 24 | DIR: GPIO 23 | ENA: GPIO 26
+Controls the NEMA stepper via an external native libgpiod step/dir pulse runner
+(configured via PI_BUBBLE_STEPPER_RUNNER), or runs in software simulation mode
+([Stepper-SIM]) when the native runner binary is not present.
 
-Safety Limit Switches (User Confirmed):
+External runner CLI protocol invoked by this module:
+  <runner> --chip <gpiochip> --pul 24 --dir 23 --ena 26
+           --dir-state <0|1> --ena-active 0 --ena-inactive 0
+           --frequency <Hz> --seconds <duration>
+
+GPIO Pinout (BCM):
+  PUL: GPIO 24 | DIR: GPIO 23 | ENA: GPIO 26
   - Limit 1 = TOP Limit    : GPIO 17 (Physical Pin 11)
   - Limit 2 = BOTTOM Limit : GPIO 27 (Physical Pin 13)
 
@@ -23,7 +30,11 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-STEPPER_RUNNER = "/home/bubble/Desktop/Bubble/native/build/stepper_runner"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+STEPPER_RUNNER = os.environ.get(
+    "PI_BUBBLE_STEPPER_RUNNER",
+    str(REPO_ROOT / "native" / "build" / "stepper_runner"),
+)
 GPIO_CHIP = os.environ.get("PI_BUBBLE_GPIO_CHIP", "gpiochip0")
 
 PUL_PIN = 24

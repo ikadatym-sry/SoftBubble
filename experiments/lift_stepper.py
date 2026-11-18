@@ -1,10 +1,12 @@
+import argparse
 import asyncio
-import websockets
 import json
 
-async def lift_and_zero(dist_total=15.0, step=5.0):
-    async with websockets.connect('ws://localhost:8080/ws') as ws:
-        steps = int(dist_total / step)
+
+async def lift_and_zero(dist_total: float = 15.0, step: float = 5.0, ws_url: str = "ws://localhost:8080/ws"):
+    import websockets
+    async with websockets.connect(ws_url) as ws:
+        steps = max(1, int(round(dist_total / step)))
         for i in range(steps):
             print(f"Jogging UP {step:.1f} mm (Step {i+1}/{steps})...")
             await ws.send(json.dumps({'cmd': 'stepper_jog', 'direction': 'up', 'mm': step, 'speed': 3.5}))
@@ -37,4 +39,9 @@ async def lift_and_zero(dist_total=15.0, step=5.0):
         print(f"✅ Final State -> Stepper: {st.get('position_mm')} mm | LoadCell: {telem.get('f_loadcell_n')} N | ΔP: {telem.get('delta_p_hpa')} hPa")
 
 if __name__ == '__main__':
-    asyncio.run(lift_and_zero(15.0, 5.0))
+    parser = argparse.ArgumentParser(description='Lift Z-carriage and re-zero home position')
+    parser.add_argument('--distance', type=float, default=15.0, help='Total lift distance in mm (default: 15.0)')
+    parser.add_argument('--step', type=float, default=5.0, help='Step size per jog in mm (default: 5.0)')
+    parser.add_argument('--ws-url', type=str, default='ws://localhost:8080/ws', help='WebSocket server URL')
+    args = parser.parse_args()
+    asyncio.run(lift_and_zero(args.distance, args.step, args.ws_url))

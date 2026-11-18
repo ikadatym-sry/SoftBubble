@@ -1,87 +1,88 @@
-# Multi-Modal Pneumatic-Optical Soft Bubble Tactile Sensor
+# SoftBubble: Multi-Modal Pneumatic-Optical Soft Bubble Tactile Sensor
 
-[![Paper](https://img.shields.io/badge/RoboSoft_2027-Paper_Companion-blue.svg)](https://robosoft2027.org)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Official open-source companion codebase and benchmark dataset for:  
-**"Multi-Modal Pneumatic-Optical Soft Bubble Tactile Sensor for Zero-Shot Cross-Geometry Force Estimation"**  
-*Targeted for IEEE International Conference on Soft Robotics (RoboSoft 2027).*
+Open-source hardware control, vision/pneumatic telemetry server, 3D deformation visualizer, automated indentation rig scripts, and offline analysis tools for a multi-modal soft bubble tactile sensor.
 
----
-
-## 📖 Overview
-
-Soft bubble tactile sensors provide compliance and rich tactile feedback for robotic manipulation. However, traditional vision-based tactile sensors often struggle with generalizability across varied indenter geometries and surface profiles.
-
-This repository implements a **multi-modal pneumatic-optical tactile sensor** that pairs internal global-shutter camera vision with high-precision 24-bit MEMS differential barometry. By unifying chamber pressure rise ($\Delta P$) and optical contact patch area ($A_c$), normal contact force ($F_z$) is accurately estimated via the analytical physical formulation:
-
-$$F_z = \alpha \cdot \frac{\Delta P \cdot A_c}{10^4} + \gamma$$
-
-Where:
-* $\alpha = 4.4305$: Pneumatic-optical coupling factor (identified on a simple flat indenter)
-* $\gamma = +0.3312\text{ N}$: Contact onset baseline offset
-* Scaling factor: $10^4\text{ hPa}\cdot\text{mm}^2 \to \text{N}$
-
-### 🎯 Key Highlights & Experimental Results
-* **Zero-Shot Cross-Geometry Generalization:** Calibrated solely on a flat indenter and evaluated strictly on **4 previously unseen complex contact geometries** (Cylinder, Square, Sphere, and 3D Triangular Pyramidal Dome) without any recalibration:
-  * **$R^2 = 97.38\%$**
-  * **$\text{MAE} = 0.1600\text{ N}$** across 2,000 independent test points.
-* **Massive Experimental Evaluation:** Tested across **24 distinct geometries** (120 continuous trials, 88,000+ synchronized time-series frames) spanning planar polygons, axisymmetric cylinders, annular cavities, organic contours (heart, star), and 3D domes.
-* **Robust Hardware & Signal Processing:** Active status polling driver for Honeywell MPRLS with 2-sample jump guard, electrical bit-flip error masking, pressure-first contact gating ($\Delta P \ge 0.38\text{ hPa}$), and localized 3D membrane crater rendering.
+> **Note:** Paper citation, author list, license confirmation, and external dataset links are tracked in the [Open TODOs](#open-todos--notes) section below.
 
 ---
 
-## 🗂️ Repository Structure
+## Overview
 
-```
+The sensor pairs an internal Raspberry Pi camera observing printed membrane markers and contact shadows with a 24-bit MEMS differential barometer measuring sealed chamber pressure rise ($\Delta P$). By fusing chamber pressure rise ($\Delta P$) with segmented optical contact footprint area ($A_c$), normal contact force ($F_z$) is estimated as:
+
+$$F_z = \alpha \cdot \frac{\Delta P \cdot A_c}{10^4} + \beta \cdot \delta_z + \gamma$$
+
+### Key Capabilities
+- **Dual-Stream Vision Engine (`bubble_engine/`):**
+  - **Optical Flow Dot Tracking (`optical_flow_tracker.py`):** Tracks persistent printed marker IDs using Lucas-Kanade Optical Flow (`cv2.calcOpticalFlowPyrLK`) with baseline drift prevention.
+  - **Contact Shadow Segmentation (`shadow_engine.py`):** Estimates contact footprint area ($A_c$, mm²) and bounding dimensions from internal membrane shading.
+  - **3D Dome Reconstruction (`dome_3d.py`):** Computes and renders a real-time 3D dome depth deformation view using NumPy/OpenCV.
+- **Robust Pneumatic Telemetry (`mprls.py`):** Native Linux I2C driver (`smbus2` / `/dev/i2c-1`) for the Honeywell MPRLS 24-bit sensor (`0x18`) with busy-bit active polling, integrity error masking, and a 2-sample outlier jump guard.
+- **Asynchronous Web Console (`server/`):** Tornado HTTP + WebSocket/MJPEG server streaming 2D overlays, 3D depth views, force estimates, and 11-column CSV recordings to an HTML5 Canvas web console (`server/web/index.html`).
+- **Automated Test Bench Scripts (`experiments/`):** Multi-trial ladder loading, overforce safety limits, Z-carriage jogging, and unannotated raw frame snapshot tools.
+
+---
+
+## Repository Structure
+
+```text
 .
-├── README.md                   # Main documentation & reproduction guide
-├── requirements.txt            # Python dependencies
-├── LICENSE                     # MIT License
+├── README.md
+├── requirements.txt
+├── LICENSE
 │
-├── bubble_engine/              # Core Python sensing & hardware drivers
-│   ├── camera.py               # Libcamera / IMX296 global shutter interface
-│   ├── mprls.py                # Honeywell MPRLS 24-bit I2C pressure driver
-│   ├── shadow_engine.py        # Vision-based contact shadow & convex hull area (Ac)
-│   ├── tracker.py              # Optical flow dot motion tracking
-│   ├── dome_3d.py              # 3D membrane reconstruction & crater deformation
-│   ├── stepper.py              # Automated vertical carriage stepper driver
-│   ├── loadcell.py             # Ground truth HX711 reference load cell reader
-│   └── pneumatic_optical_force_estimator.py # Analytical force model
+├── bubble_engine/                    # Core vision, estimation & hardware drivers
+│   ├── camera.py                     # Picamera2 / libcamera capture wrapper
+│   ├── optical_flow_tracker.py       # Persistent-ID Lucas-Kanade dot tracker
+│   ├── shadow_engine.py              # Contact shadow & footprint area (A_c)
+│   ├── dome_3d.py                    # 3D membrane deformation & renderer
+│   ├── mprls.py                      # Honeywell MPRLS I2C pressure driver
+│   ├── led_controller.py             # WS2812B NeoPixel SPI controller
+│   ├── loadcell.py                   # HX711 reference load cell reader (lgpio/RPi.GPIO)
+│   ├── stepper.py                    # Z-axis stepper controller & safety limit watchdog
+│   ├── pneumatic_optical_force_estimator.py  # Standalone piecewise force estimator
+│   ├── analyzer.py                   # Auxiliary 3D geometry analyzer
+│   ├── reconstruction.py             # Auxiliary depth-map reconstruction module
+│   ├── tracker.py                    # Auxiliary baseline dot tracker
+│   └── unblocked_baseline.jpg        # Sample resting membrane frame
 │
-├── server/                     # Real-time WebSocket streaming & dashboard
-│   ├── server.py               # Main asynchronous telemetry engine & CSV recorder
-│   ├── run_desktop.sh          # Desktop launch script with auto-cleanup process trap
+├── server/                           # Real-time streaming & recording backend
+│   ├── server.py                     # Tornado HTTP/WebSocket server & 11-col logger
+│   ├── run_desktop.sh                # Chromium desktop launcher with cleanup trap
 │   └── web/
-│       └── index.html          # Three.js 3D web dashboard & live telemetry
+│       └── index.html                # HTML5 Canvas telemetry & control UI
 │
-├── experiments/                # Automated data collection & benchmark protocols
-│   ├── auto_run_geometry_trials.py # Automated multi-step ladder loading protocol
-│   ├── press_and_capture_raw.py    # Clean unannotated camera snapshot capture
-│   └── lift_stepper.py             # Z-carriage calibration & homing tool
+├── experiments/                      # Rig automation & calibration configs
+│   ├── auto_run_geometry_trials.py   # Multi-trial step force benchmark (0.5–5.0 N)
+│   ├── press_and_capture_raw.py      # Press to target force & save raw frame
+│   ├── run_safe_stepper_test.py      # Press-and-hold safety validation test
+│   ├── lift_stepper.py               # Lift Z-carriage and zero home reference
+│   ├── force_calibration.json        # Live server force model coefficients
+│   └── loadcell_calibration.json     # HX711 scale calibration & GPIO pinout
 │
-├── analysis/                   # Paper figure generation & statistical validation
-│   ├── reproduce_all_paper_figures.py           # 1-Click master figure reproduction script
-│   ├── generate_unseen_4_geometries_parity_plot.py # 4 Unseen shapes generalization plot
-│   ├── generate_combined_parity_plot_5_shapes.py   # 5 Shapes multi-geometry benchmark plot
-│   └── generate_all_individual_shape_plots.py      # Individual parity & step tracking plots
+├── analysis/                         # Offline plotting & summary scripts
+│   ├── benchmark_utils.py            # Shared CSV loader & parity plotting helpers
+│   ├── reproduce_all_paper_figures.py
+│   ├── generate_unseen_4_geometries_parity_plot.py
+│   ├── generate_combined_parity_plot_5_shapes.py
+│   └── generate_all_individual_shape_plots.py
 │
-├── data/                       # Benchmark telemetry & summary datasets
-│   ├── README.md               # Dataset variable definitions
-│   ├── all_24_geometries_summary.csv        # Comprehensive 24-geometry metrics table
-│   ├── unseen_4_geometries_sampled_data.csv # 2,000 sampled points from unseen shapes
-│   └── sample_trials/                       # Sample 11-column CSV recordings
+└── data/                             # Sample trials & summary metrics
+    ├── README.md
+    ├── all_24_geometries_summary.csv
+    └── sample_trials/                # Bundled Trial-1 sample CSVs (8 geometries)
 ```
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ### 1. Installation
 
-Clone this repository and install dependencies in a virtual environment:
+On a workstation (for offline analysis / development):
 
 ```bash
 git clone https://github.com/ikadatym-sry/SoftBubble.git
@@ -92,66 +93,96 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Reproduce Paper Figures (1-Click)
-
-To reproduce the publication figures from the experimental dataset:
+On **Raspberry Pi 5** (for live sensor acquisition), install system hardware packages as well:
 
 ```bash
-cd analysis
-python3 reproduce_all_paper_figures.py
+sudo apt update
+sudo apt install -y python3-picamera2 python3-lgpio python3-smbus2 python3-spidev
 ```
 
-Generated 300 DPI figures will be placed in `analysis/figures/`:
-* `unseen_4_geometries_parity_plot.png`: Parity verification across 4 unseen geometries ($R^2 = 97.38\%$).
-* `combined_5_geometries_parity_plot.png`: Multi-geometry parity benchmark ($R^2 = 97.82\%$).
+---
 
-### 3. Launch Live Telemetry Server (Hardware Setup)
+### 2. Offline Analysis (Works Out-of-the-Box)
 
-On a Raspberry Pi 5 connected to the tactile sensor hardware:
+Run all analysis plots using the bundled `data/sample_trials/` dataset (or pass `--data-dir /path/to/full/results`):
+
+```bash
+python3 analysis/reproduce_all_paper_figures.py
+```
+
+Generated 300 DPI PNG plots and sampled CSV outputs are saved under `analysis/figures/`.
+
+To inspect offline dot detection on the included sample membrane image (`bubble_engine/unblocked_baseline.jpg`):
+
+```bash
+python3 bubble_engine/optical_flow_tracker.py
+```
+
+---
+
+### 3. Live Server & Automated Experiments (Raspberry Pi 5)
+
+Start the live telemetry and recording server:
 
 ```bash
 python3 server/server.py
 ```
-Open a browser and navigate to `http://localhost:8080` (or `http://<pi-ip>:8080`) to access the real-time Three.js 3D membrane deformation viewer, optical flow dot vector fields, and live force telemetry graphs.
 
----
+Then open `http://localhost:8080` in a browser (or run `./server/run_desktop.sh` on Raspberry Pi OS desktop for a managed Chromium app window).
 
-## 🔬 Benchmark Results (24 Geometries)
+Run an automated 5-trial force ladder benchmark while `server/server.py` is active:
 
-| Geometry Category | Evaluated Shapes | Total Samples | $R^2$ Score | Mean Abs Error (MAE) |
-| :--- | :--- | :---: | :---: | :---: |
-| **Baseline Calibration** | Flat Plate (50 × 50 mm) | 2,925 | 98.94% | 0.1081 N |
-| **Cross-Geometry Unseen** | Cylinder, Square, Sphere, Triangle Dome | 18,702 | **97.38%** | **0.1600 N** |
-| **Extended Benchmark** | Hexagons (13, 25, 35 mm), Squares (29–60 mm), Cylinders (35, 45 mm), Obtuse Polygon, Hollow Cylinder, Domes, Star, Heart | 66,955 | 83.20% | 0.4410 N |
-| **GRAND TOTAL** | **24 Geometries (120 Trials)** | **88,582** | **84.29%** | **0.4258 N** |
-
----
-
-## 🛠️ Hardware Requirements & Wiring
-
-The sensor utilizes a streamlined **single-board embedded architecture** powered entirely by the Raspberry Pi 5 without external microcontrollers:
-* **Host Computer:** Raspberry Pi 5 (4GB/8GB)
-* **Vision Sensor:** Raspberry Pi Global Shutter Camera (Sony IMX296, 12mm lens) via CSI ribbon cable
-* **Differential Barometer:** Honeywell MPRLS Digital Pressure Sensor (I2C address `0x18`, SDA=GPIO 2, SCL=GPIO 3)
-* **Reference Rig:** HX711 24-bit ADC + 1 kg / 5 kg Load Cell (DT=GPIO 5, SCK=GPIO 6)
-* **Z-Axis Carriage:** NEMA 17 Stepper + TMC2209 driver (STEP=GPIO 20, DIR=GPIO 21, EN=GPIO 16)
-
----
-
-## 📜 Citation
-
-If you use this codebase, sensor design, or dataset in your research, please cite:
-
-```bibtex
-@inproceedings{softbubble2027robosoft,
-  title={Multi-Modal Pneumatic-Optical Soft Bubble Tactile Sensor for Zero-Shot Cross-Geometry Force Estimation},
-  author={Pong and Advisor},
-  booktitle={IEEE International Conference on Soft Robotics (RoboSoft)},
-  year={2027}
-}
+```bash
+python3 experiments/auto_run_geometry_trials.py --shape flat --trials 5
 ```
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Hardware Architecture & Pinout
+
+This codebase runs on a **single Raspberry Pi 5** without an external Arduino/ESP8266 microcontroller:
+
+| Subsystem | Device / Sensor | Interface & Pins (BCM) | Module |
+| :--- | :--- | :--- | :--- |
+| **Host Computer** | Raspberry Pi 5 | Linux / I2C / SPI / CSI / GPIO | — |
+| **Internal Camera** | Pi Camera via `picamera2` *(tested with Camera Module 3 Wide / `imx708_wide`, `LensPosition=12.0`)* | CSI-2 ribbon | `bubble_engine/camera.py` |
+| **Pressure Sensor** | Honeywell MPRLS (24-bit, 0–25 psi) | I2C Bus 1 (`0x18`), SDA=`GPIO 2`, SCL=`GPIO 3` | `bubble_engine/mprls.py` |
+| **Reference Force** | Load Cell + HX711 24-bit ADC | `DT=GPIO 5`, `SCK=GPIO 6` *(configurable via JSON)* | `bubble_engine/loadcell.py` |
+| **LED Illumination** | 4× WS2812B NeoPixels | SPI0 MOSI (`GPIO 10`, Physical Pin 19) | `bubble_engine/led_controller.py` |
+| **Z-Axis Stepper** | NEMA Stepper + Step/Dir Driver | `PUL=GPIO 24`, `DIR=GPIO 23`, `ENA=GPIO 26`<br>`LIMIT_TOP=GPIO 17`, `LIMIT_BOTTOM=GPIO 27` | `bubble_engine/stepper.py` |
+
+> **Important Note on Stepper Motion:** Real motor stepping delegates pulse generation to an external native `libgpiod` CLI binary configured via `PI_BUBBLE_STEPPER_RUNNER` (default `./native/build/stepper_runner`, **not bundled in this repository**). When the binary is absent, `BubbleStepper` automatically falls back to software simulation (`[Stepper-SIM]`) so hardware UI/tests remain safe to explore.
+
+---
+
+## Calibration Notes
+
+Because pneumatic-optical coupling depends on each silicone membrane's thickness, chamber volume, camera distance, and lens scale, calibrate parameters for your own hardware build:
+
+1. **Force Estimation Calibration (`experiments/force_calibration.json`):**
+   - `server/server.py` searches `BUBBLE_FORCE_CALIBRATION`, `./force_calibration.json`, and `experiments/force_calibration.json`.
+   - Note that `experiments/force_calibration.json` currently stores an example live runtime tuning (`alpha_pneumatic=5.85`, `gamma_offset_n=0.1`), whereas the offline `analysis/` scripts use the planar-fitted benchmark coefficients (`alpha=4.4305`, `gamma=0.3312` with `beta=0`) over a wider dataset (`data/all_24_geometries_summary.csv`). Update `force_calibration.json` to match your target calibration curve.
+2. **Baseline Pressure Reference ($P_0$):**
+   - `server/server.py` continuously tracks resting ambient pressure using an exponential moving average with anti-latchup recovery when untouched.
+   - `analysis/` scripts estimate $P_0$ as the median of initial unpressed frames per shape.
+3. **Load Cell Calibration (`experiments/loadcell_calibration.json`):**
+   - Stores `counts_per_gram` and HX711 GPIO pins (`dt_pin`, `sck_pin`). Override path via `BUBBLE_LOADCELL_CALIBRATION`.
+
+---
+
+## Summary Dataset Reference
+
+Full summary statistics computed over all 24 shapes (85,485 pressed frames across 120 continuous trials using `ALPHA_PAPER=4.4305`, `GAMMA_PAPER=0.3312`, median resting $P_0$) are provided in [data/all_24_geometries_summary.csv](data/all_24_geometries_summary.csv):
+- **Calibration Baseline (`flat`):** 2,925 pressed frames across 5 trials ($R^2 = 98.94\%$, $\text{MAE} = 0.1081\text{ N}$).
+- **4-Shape Unseen Subset (`cylinder`, `square`, `sphere`, `triangle_dome25-10`):**
+  - Across all 18,702 pressed frames: $R^2 = 97.00\%$, $\text{MAE} = 0.1753\text{ N}$.
+  - Across a balanced 2,000-point random sample (500/shape, `default_rng(42)`): $R^2 = 97.17\%$, $\text{MAE} = 0.1632\text{ N}$ (`analysis/generate_unseen_4_geometries_parity_plot.py` on the full dataset).
+- **All 24 Geometries Combined:** 85,485 pressed frames ($R^2 = 85.73\%$, $\text{MAE} = 0.3940\text{ N}$).
+
+---
+
+## Open TODOs & Notes
+- [ ] Confirm final paper title, author list, and BibTeX citation once accepted/published.
+- [ ] Confirm open-source license choice with advisor (currently MIT placeholder in `LICENSE`).
+- [ ] Optionally publish full 120-trial raw dataset archive externally (e.g., Zenodo/OSF) and link here.
+- [ ] Optionally add the C/C++ `stepper_runner` source used on Raspberry Pi 5 if hardware actuation code is also released.

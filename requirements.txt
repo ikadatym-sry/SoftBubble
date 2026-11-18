@@ -1,13 +1,12 @@
-# Core scientific computing and visualization
+# Core computing, vision, plotting, and server dependencies (cross-platform)
 numpy>=1.22.0
-scipy>=1.8.0
 matplotlib>=3.5.0
 opencv-python>=4.5.0
-openpyxl>=3.0.0
-
-# Real-time Web & Telemetry Engine
+tornado>=6.1
 websockets>=10.0
-aiohttp>=3.8.0
 
-# Hardware interface (for Raspberry Pi execution)
-smbus2>=0.4.0
+# Raspberry Pi 5 hardware dependencies (install on Pi OS via apt or pip as needed):
+#   sudo apt install -y python3-picamera2 python3-lgpio python3-smbus2 python3-spidev
+# Or via pip on Linux ARM64:
+#   smbus2>=0.4.0
+#   spidev>=3.5

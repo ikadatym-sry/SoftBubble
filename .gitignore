@@ -1,34 +1,12 @@
 # ==============================================================================
-# Python & Operating System Exclusions for Soft Bubble Tactile Sensor
+# Exclusions for Soft Bubble Tactile Sensor Open-Source Repository
 # ==============================================================================
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
 
 # Virtual environments
 env/
@@ -46,15 +24,16 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# IDE and Editor Files
+# IDE / Editor Files
 .idea/
 .vscode/
-*.sublime-project
-*.sublime-workspace
 *.swp
 *.swo
 
-# Temporary / Log files
+# Runtime Outputs, Logs, Local Datasets & Generated Figures
+server.log
 *.log
 *.tmp
-temp/
+tmp/
+results/
+analysis/figures/

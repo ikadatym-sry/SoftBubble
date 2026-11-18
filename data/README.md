@@ -1,32 +1,28 @@
-# Tactile Benchmark Dataset
+# Tactile Benchmark Data & Sample Recordings
 
-This directory contains experimental telemetry datasets, summary tables, and sampled verification trials for the multi-modal pneumatic-optical soft bubble tactile sensor.
+This directory contains sample trial CSVs and a verified summary table for the multi-modal pneumatic-optical soft bubble tactile sensor.
 
-## Files & Directories
+## Contents
 
-- `all_24_geometries_summary.csv`: Complete statistical summary table across all 24 evaluated indenter shapes (120 continuous trials, 88,000+ contact samples).
-- `unseen_4_geometries_sampled_data.csv`: Uniformly sampled dataset (2,000 points, 500 per shape) for the 4 previously unseen test geometries (Cylinder, Square, Sphere, Triangle Dome 25-10).
-- `combined_5_geometries_sampled_data.csv`: Uniformly sampled dataset (2,500 points, 500 per shape) across 5 representative geometries.
-- `sample_trials/`: Raw 11-column CSV recordings for representative shapes, ready for immediate playback and verification without downloading the entire 111 MB dataset.
+- `all_24_geometries_summary.csv`: Summary metrics ($R^2$, MAE, RMSE, Max Error, pressed sample counts) evaluated over all 24 indenter geometries using baseline resting median $P_0$ and planar calibration coefficients ($\alpha = 4.4305$, $\gamma = +0.3312\text{ N}$).
+- `sample_trials/`: Representative Trial-1 11-column CSV recordings (8 geometries) bundled so offline analysis scripts run out of the box on a fresh clone.
 
 ## 11-Column CSV Data Format
-
-Every recording frame contains 11 synchronized multi-modal variables:
 
 | Column | Type | Description |
 | :--- | :---: | :--- |
 | `Timestamp` | string | Elapsed experiment time (`MM:SS.ss`) |
-| `Pressed?` | bool | Multi-modal physical contact gate (`True`/`False`) |
-| `Pressure_Raw` | int | Honeywell MPRLS 24-bit raw ADC reading |
-| `Pressure_hPa` | float | Calibrated internal chamber pressure ($P$) [hPa] |
-| `LoadCell_Raw` | int | HX711 24-bit raw ADC reading |
-| `LoadCell_N` | float | Ground truth reference normal force ($F_{\mathrm{ref}}$) [N] |
-| `Dimension_px` | string | Segmented contact footprint bounding box [px] |
-| `Area_px2` | float | Convex hull contact footprint area ($A_c$) [px²] |
-| `Dimension_mm` | string | Calibrated contact footprint dimensions ($L \times W$) [mm] |
-| `Area_mm2` | float | Calibrated contact footprint area ($A_c$) [mm²] |
-| `Displacement_px`| float | Membrane center deformation displacement ($\delta_z$) [px] |
+| `Pressed?` | bool | Multi-modal contact gate (`True`/`False`) |
+| `Pressure_Raw` | int | Honeywell MPRLS 24-bit raw ADC count |
+| `Pressure_hPa` | float | Filtered chamber pressure $P$ [hPa] |
+| `LoadCell_Raw` | int | HX711 24-bit raw ADC count |
+| `LoadCell_N` | float | Reference normal force $F_{\mathrm{loadcell}}$ [N] |
+| `Dimension_px` | string | Contact shadow bounding dimensions ($L \times W$) [px] |
+| `Area_px2` | float | Contact shadow contour area ($A_c$) [px²] |
+| `Dimension_mm` | string | Calibrated contact dimensions ($L \times W$) [mm] |
+| `Area_mm2` | float | Calibrated contact area ($A_c$) [mm²] |
+| `Displacement_px`| float | Max optical flow marker displacement ($\delta$) [px] |
 
-## Full Dataset Availability
+## Using Your Own or Full Datasets
 
-The full dataset containing all 120 trials across 24 geometries (~111 MB) is consolidated in `results/all.xlsx` and available in the accompanying paper archive.
+By default, scripts in `analysis/` automatically use `results/<shape>/*.csv` if present at the repository root (or passed via `--data-dir /path/to/results`), falling back seamlessly to `data/sample_trials/` when running with only the bundled sample files.

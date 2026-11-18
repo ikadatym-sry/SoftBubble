@@ -4,17 +4,17 @@ Runs with Optical Flow Dot Tracker (63 dots), Solid Shaded 3D Dome Engine,
 Real-time Engineering Telemetry, and Z-Stage Stepper Rig Controls.
 """
 
+import asyncio
 import os
 import sys
 import json
 import base64
 import time
 import threading
-import fcntl
 import csv
 from datetime import datetime
 from pathlib import Path
-from typing import Set, Tuple
+from typing import Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -23,16 +23,17 @@ import tornado.web
 import tornado.websocket
 
 SRC_DIR = Path(__file__).resolve().parent
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+REPO_ROOT = SRC_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from bubble_engine.camera import BubbleCamera
-from test_optical_flow_live import OpticalFlowDotEngine
+from bubble_engine.optical_flow_tracker import OpticalFlowDotEngine
 from bubble_engine.dome_3d import Tactile3DDomeEngine
 from bubble_engine.shadow_engine import ContactShadowEngine
 from bubble_engine.stepper import BubbleStepper
 from bubble_engine.loadcell import BubbleLoadCell
-from bubble_engine.mprls import MPRLSDriver, mpr_sensor, HAS_MPRLS
+from bubble_engine.mprls import mpr_sensor
 from bubble_engine.led_controller import BubbleLEDController
 
 def read_server_pressure():
@@ -61,10 +62,6 @@ class TactileServerState:
         self.auto_brightness_enabled = True
         self.blanking_counter = 0
 
-        # Optional Serial Controller fallback (if Arduino is still plugged in)
-        self.serial_ports = []
-        self._init_serial_ports()
-
         self.ws_clients: Set[tornado.websocket.WebSocketHandler] = set()
         self.running = False
         self._calibrate_requested = True  # Auto-calibrate at startup
@@ -73,8 +70,8 @@ class TactileServerState:
         self.latest_payload = None
         self._lock = threading.Lock()
         
-        # TestVersion1 Data Recording Engine (results/ folder)
-        self.results_dir = Path(__file__).resolve().parent / "results"
+        # Real-time 11-column CSV Recording Engine (results/ folder)
+        self.results_dir = Path(os.environ.get("BUBBLE_RESULTS_DIR", str(REPO_ROOT / "results")))
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.is_recording = False
         self.record_start_time = 0.0
@@ -96,7 +93,7 @@ class TactileServerState:
                 return self.record_filename
             now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             if shape_name:
-                shape_clean = shape_name.strip().lower()
+                shape_clean = Path(shape_name.strip().lower()).name
                 save_dir = self.results_dir / shape_clean
                 save_dir.mkdir(parents=True, exist_ok=True)
                 if trial_idx > 0:
@@ -150,34 +147,24 @@ class TactileServerState:
             return fname, count
 
     def _load_force_calibration(self):
-        calib_file = Path(__file__).resolve().parent / "force_calibration.json"
-        if calib_file.exists():
-            try:
-                with open(calib_file, "r", encoding="utf-8") as f:
-                    cal = json.load(f)
-                self.alpha_pneumatic = float(cal.get("alpha_pneumatic", 1.0))
-                self.beta_elastic = float(cal.get("beta_elastic_n_per_mm", 0.0))
-                self.gamma_offset = float(cal.get("gamma_offset_n", 0.0))
-                print(f"[ForceCalibration] Loaded: α={self.alpha_pneumatic:.3f}, β={self.beta_elastic:.4f}, γ={self.gamma_offset:+.4f}")
-            except Exception as e:
-                print(f"[ForceCalibration] Note: {e}")
-
-    def _init_serial_ports(self):
-        try:
-            import serial
-            import glob
-            candidate_ports = sorted(glob.glob('/dev/ttyACM*') + glob.glob('/dev/ttyUSB*'))
-            for port in candidate_ports:
+        candidates = [
+            Path(os.environ["BUBBLE_FORCE_CALIBRATION"]) if os.environ.get("BUBBLE_FORCE_CALIBRATION") else None,
+            REPO_ROOT / "force_calibration.json",
+            REPO_ROOT / "experiments" / "force_calibration.json",
+            SRC_DIR / "force_calibration.json",
+        ]
+        for calib_file in candidates:
+            if calib_file is not None and calib_file.exists():
                 try:
-                    s = serial.Serial(port, 115200, timeout=0.05)
-                    time.sleep(0.5)
-                    s.write(f'B{self.current_brightness}\n'.encode())
-                    self.serial_ports.append(s)
-                    print(f"[SERIAL] Connected to MCU on {port} at 115200 baud.")
+                    with open(calib_file, "r", encoding="utf-8") as f:
+                        cal = json.load(f)
+                    self.alpha_pneumatic = float(cal.get("alpha_pneumatic", 1.0))
+                    self.beta_elastic = float(cal.get("beta_elastic_n_per_mm", 0.0))
+                    self.gamma_offset = float(cal.get("gamma_offset_n", 0.0))
+                    print(f"[ForceCalibration] Loaded from {calib_file}: α={self.alpha_pneumatic:.3f}, β={self.beta_elastic:.4f}, γ={self.gamma_offset:+.4f}")
+                    return
                 except Exception as e:
-                    print(f"[SERIAL] Note ({port}): {e}")
-        except Exception as e:
-            print(f"[SERIAL] Driver error: {e}")
+                    print(f"[ForceCalibration] Note ({calib_file}): {e}")
 
     def set_brightness(self, val: int):
         val = max(0, min(100, int(val)))
@@ -185,11 +172,6 @@ class TactileServerState:
             self.current_brightness = val
             self.blanking_counter = 4
             self.led_ctrl.set_brightness(val)
-            for s in list(self.serial_ports):
-                try:
-                    s.write(f'B{val}\n'.encode())
-                except Exception:
-                    pass
 
     def start_engine(self):
         self.camera.start()
@@ -199,25 +181,8 @@ class TactileServerState:
             self.loadcell.start_polling(hz=12)
         if mpr_sensor.is_connected:
             mpr_sensor.start_background_polling(hz=40)
-        if self.serial_ports:
-            threading.Thread(target=self._serial_telemetry_loop, daemon=True).start()
         thread = threading.Thread(target=self._processing_loop, daemon=True)
         thread.start()
-
-    def _serial_telemetry_loop(self):
-        print(f"[SERIAL] Listening on {len(self.serial_ports)} port(s) for pressure telemetry...")
-        while self.running:
-            for s in list(self.serial_ports):
-                try:
-                    line = s.readline().decode('utf-8', errors='ignore').strip()
-                    if line.startswith("P:"):
-                        p_val = float(line[2:])
-                        if 300.0 <= p_val <= 2000.0:
-                            mpr_sensor.latest_pressure = p_val
-                            mpr_sensor.is_connected = True
-                except Exception:
-                    pass
-            time.sleep(0.01)
 
     def _processing_loop(self):
         print("[ServerState] Vision processing loop active with Optical Flow & 3D Dome.")
@@ -426,18 +391,18 @@ class TactileServerState:
             telemetry["f_loadcell_n"] = round(f_loadcell_n, 3)
             telemetry["f_error_n"] = round(f_sensor_n - f_loadcell_n, 3)
 
-            # TestVersion1: Real-time Data Recording Engine (results/ folder)
-            # Exactly 10 columns strictly ordered:
-            # 1. Timestamp (Starts at 0, Example: Time: 00:00)
+            # Real-time 11-column Data Recording Engine (results/ folder)
+            # 1. Timestamp (Elapsed MM:SS.ss)
             # 2. Pressed?: True/False
             # 3. Pressure_Raw (24-bit ADC counts)
             # 4. Pressure_hPa (calibrated pressure in hPa)
             # 5. LoadCell_Raw (raw ADC reading from HX711)
             # 6. LoadCell_N (calibrated force in Newton)
-            # 7. Dimension_px (N1 x N2 of detected object in px)
+            # 7. Dimension_px (L x W of detected shadow in px)
             # 8. Area_px2 (Area in px²)
-            # 9. Dimension_mm (N1 x N2 of detected object in mm)
+            # 9. Dimension_mm (L x W of detected shadow in mm)
             # 10. Area_mm2 (Area in mm²)
+            # 11. Displacement_px (Max optical flow marker displacement in px)
             if self.is_recording and self.record_writer is not None:
                 elapsed_sec = time.time() - self.record_start_time
                 mins = int(elapsed_sec // 60)
@@ -608,7 +573,14 @@ class TactileServerState:
         print("[ServerState] Calibration requested.")
 
 
-state = TactileServerState()
+state: Optional[TactileServerState] = None
+
+
+def get_state() -> TactileServerState:
+    global state
+    if state is None:
+        state = TactileServerState()
+    return state
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -625,11 +597,12 @@ class MJPEGHandler(tornado.web.RequestHandler):
         self.set_header("Cache-Control", "no-cache, private")
         self.set_header("Pragma", "no-cache")
         self.set_header("Content-Type", "multipart/x-mixed-replace; boundary=FRAME")
+        srv_state = get_state()
         try:
             while True:
-                with state._lock:
-                    if state.latest_payload and "dome_base64" in state.latest_payload:
-                        raw_bytes = base64.b64decode(state.latest_payload["dome_base64"])
+                with srv_state._lock:
+                    if srv_state.latest_payload and "dome_base64" in srv_state.latest_payload:
+                        raw_bytes = base64.b64decode(srv_state.latest_payload["dome_base64"])
                     else:
                         raw_bytes = None
                 if raw_bytes:
@@ -639,7 +612,7 @@ class MJPEGHandler(tornado.web.RequestHandler):
                     self.write(raw_bytes)
                     self.write(b"\r\n")
                     await self.flush()
-                await tornado.gen.sleep(0.033)
+                await asyncio.sleep(0.033)
         except Exception:
             pass
 
@@ -650,79 +623,81 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     def open(self):
         self._is_busy = False
-        state.ws_clients.add(self)
-        print(f"[WebSocket] Client connected (Total: {len(state.ws_clients)})")
+        srv_state = get_state()
+        srv_state.ws_clients.add(self)
+        print(f"[WebSocket] Client connected (Total: {len(srv_state.ws_clients)})")
 
     def on_message(self, message):
+        srv_state = get_state()
         try:
             data = json.loads(message)
             cmd = data.get("cmd")
             if cmd == "calibrate":
-                state.request_calibrate()
+                srv_state.request_calibrate()
             elif cmd == "set_brightness":
                 val = int(data.get("val", 25))
-                state.auto_brightness_enabled = False
-                state.set_brightness(val)
+                srv_state.auto_brightness_enabled = False
+                srv_state.set_brightness(val)
             elif cmd == "set_auto_light":
-                state.auto_brightness_enabled = bool(data.get("val", True))
+                srv_state.auto_brightness_enabled = bool(data.get("val", True))
             elif cmd == "stepper_jog":
                 direction = str(data.get("direction", "down")).lower()
                 dist_mm = float(data.get("mm", 1.0))
                 speed = float(data.get("speed", 4.0))
-                state.stepper.jog(direction, dist_mm, speed)
+                srv_state.stepper.jog(direction, dist_mm, speed)
             elif cmd == "stepper_home":
                 speed = float(data.get("speed", 3.0))
-                state.stepper.go_home(speed)
+                srv_state.stepper.go_home(speed)
             elif cmd == "stepper_stop":
-                state.stepper.stop()
+                srv_state.stepper.stop()
             elif cmd == "stepper_zero":
-                state.stepper.reset_position()
+                srv_state.stepper.reset_position()
             elif cmd in ("tare", "loadcell_tare"):
-                if state.loadcell.is_connected:
-                    state.loadcell.tare(samples=10)
+                if srv_state.loadcell.is_connected:
+                    srv_state.loadcell.tare(samples=10)
             elif cmd == "tune_stiffness":
                 delta = float(data.get("delta", 0.0))
-                new_th = round(float(np.clip(state.tracker.displacement_thresh_px + delta, 1.0, 8.0)), 1)
-                state.tracker.displacement_thresh_px = new_th
-                state.dome_engine.disp_thresh_px = new_th
+                new_th = round(float(np.clip(srv_state.tracker.displacement_thresh_px + delta, 1.0, 8.0)), 1)
+                srv_state.tracker.displacement_thresh_px = new_th
+                srv_state.dome_engine.disp_thresh_px = new_th
                 print(f"[ServerState] Stiffness threshold updated to {new_th} px")
             elif cmd == "orbit_3d":
                 dx = float(data.get("dx", 0.0))
                 dy = float(data.get("dy", 0.0))
-                state.dome_engine.azimuth_deg = (state.dome_engine.azimuth_deg - dx * 0.7) % 360.0
-                state.dome_engine.elevation_deg = float(np.clip(state.dome_engine.elevation_deg + dy * 0.5, 5.0, 88.0))
-                state.dome_engine._update_rotation_matrix()
+                srv_state.dome_engine.azimuth_deg = (srv_state.dome_engine.azimuth_deg - dx * 0.7) % 360.0
+                srv_state.dome_engine.elevation_deg = float(np.clip(srv_state.dome_engine.elevation_deg + dy * 0.5, 5.0, 88.0))
+                srv_state.dome_engine._update_rotation_matrix()
             elif cmd == "reset_view":
                 mode = str(data.get("mode", "iso"))
-                state.dome_engine.reset_view(mode)
+                srv_state.dome_engine.reset_view(mode)
             elif cmd == "toggle_dot_circles":
-                state.tracker.show_circles = bool(data.get("enabled", True))
-                print(f"[ServerState] Marker dot circles visibility: {state.tracker.show_circles}")
+                srv_state.tracker.show_circles = bool(data.get("enabled", True))
+                print(f"[ServerState] Marker dot circles visibility: {srv_state.tracker.show_circles}")
             elif cmd == "toggle_record":
-                if state.is_recording:
-                    state.stop_recording()
+                if srv_state.is_recording:
+                    srv_state.stop_recording()
                 else:
                     shape = str(data.get("shape", ""))
                     trial = int(data.get("trial", 0))
-                    state.start_recording(shape_name=shape, trial_idx=trial)
+                    srv_state.start_recording(shape_name=shape, trial_idx=trial)
             elif cmd == "start_record":
                 shape = str(data.get("shape", ""))
                 trial = int(data.get("trial", 0))
-                state.start_recording(shape_name=shape, trial_idx=trial)
+                srv_state.start_recording(shape_name=shape, trial_idx=trial)
             elif cmd == "stop_record":
-                state.stop_recording()
+                srv_state.stop_recording()
             elif cmd == "capture_snapshot":
                 custom_raw_path = str(data.get("raw_path", "")).strip()
-                with state._lock:
-                    comb = getattr(state, "latest_jpeg_comb", None)
-                    cam = getattr(state, "latest_jpeg_cam", None)
-                    dome = getattr(state, "latest_jpeg_dome", None)
-                    raw_bgr = getattr(state, "latest_raw_bgr", None)
-                    telem = (state.latest_payload.get("telemetry", {}) if state.latest_payload else {})
+                with srv_state._lock:
+                    comb = getattr(srv_state, "latest_jpeg_comb", None)
+                    cam = getattr(srv_state, "latest_jpeg_cam", None)
+                    dome = getattr(srv_state, "latest_jpeg_dome", None)
+                    raw_bgr = getattr(srv_state, "latest_raw_bgr", None)
+                    telem = (srv_state.latest_payload.get("telemetry", {}) if srv_state.latest_payload else {})
                     flc = telem.get("f_loadcell_n", 0.0)
                     dp = telem.get("delta_p_hpa", 0.0)
 
-                snap_dir = state.results_dir / "snapshots"
+                snap_dir = srv_state.results_dir / "snapshots"
                 snap_dir.mkdir(parents=True, exist_ok=True)
                 ts = time.strftime("%Y%m%d_%H%M%S")
 
@@ -730,8 +705,18 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                     raw_file = snap_dir / f"snapshot_raw_{ts}.jpg"
                     cv2.imwrite(str(raw_file), raw_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
                     if custom_raw_path:
-                        cv2.imwrite(custom_raw_path, raw_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                        print(f"📸 [Snapshot] Saved custom RAW to {custom_raw_path}")
+                        res_root = srv_state.results_dir.resolve()
+                        cand = Path(custom_raw_path)
+                        if not cand.is_absolute():
+                            rel = custom_raw_path.removeprefix("results/").lstrip("/")
+                            cand = res_root / rel
+                        cand_resolved = cand.resolve()
+                        if cand_resolved.is_relative_to(res_root):
+                            cand_resolved.parent.mkdir(parents=True, exist_ok=True)
+                            cv2.imwrite(str(cand_resolved), raw_bgr, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                            print(f"📸 [Snapshot] Saved custom RAW to {cand_resolved}")
+                        else:
+                            print(f"⚠️ [Snapshot] Rejected custom_raw_path outside results_dir: {custom_raw_path}")
                 if comb is not None:
                     with open(snap_dir / f"snapshot_combined_{ts}.jpg", "wb") as f:
                         f.write(comb)
@@ -747,33 +732,36 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             print(f"[WebSocket] Error parsing message: {e}")
 
     def on_close(self):
-        state.ws_clients.discard(self)
-        print(f"[WebSocket] Client disconnected (Remaining: {len(state.ws_clients)})")
+        srv_state = get_state()
+        srv_state.ws_clients.discard(self)
+        print(f"[WebSocket] Client disconnected (Remaining: {len(srv_state.ws_clients)})")
 
 
 async def _safe_send_frame(client, data_str):
+    srv_state = get_state()
     try:
         if client.ws_connection and not client.ws_connection.is_closing():
             await client.write_message(data_str)
     except Exception:
-        state.ws_clients.discard(client)
+        srv_state.ws_clients.discard(client)
     finally:
         client._is_busy = False
 
 
 def broadcast_loop():
-    if not state.ws_clients or state.latest_payload is None:
+    srv_state = get_state()
+    if not srv_state.ws_clients or srv_state.latest_payload is None:
         return
 
-    with state._lock:
-        payload = state.latest_payload
+    with srv_state._lock:
+        payload = srv_state.latest_payload
 
     data_str = json.dumps(payload)
     loop = tornado.ioloop.IOLoop.current()
 
-    for client in list(state.ws_clients):
+    for client in list(srv_state.ws_clients):
         if not client.ws_connection or client.ws_connection.is_closing():
-            state.ws_clients.discard(client)
+            srv_state.ws_clients.discard(client)
             continue
         if getattr(client, "_is_busy", False):
             continue
@@ -795,14 +783,14 @@ def make_app():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    state.start_engine()
+    get_state().start_engine()
 
     app = make_app()
     app.listen(port, address="0.0.0.0")
-    print(f"=====================================================")
-    print(f"  BUBBLE 3D TACTILE ENGINE ACTIVE")
-    print(f"  Web 3D Console: http://192.168.4.1:{port}")
-    print(f"=====================================================")
+    print("=====================================================")
+    print("  BUBBLE 3D TACTILE ENGINE ACTIVE")
+    print(f"  Web 3D Console: http://localhost:{port}")
+    print("=====================================================")
 
     # Schedule WebSocket broadcast every 33ms (~30 FPS)
     tornado.ioloop.PeriodicCallback(broadcast_loop, 33).start()

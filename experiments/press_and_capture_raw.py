@@ -3,22 +3,23 @@
 Press Indenter to Target Force, Capture Pure RAW Unannotated Camera Frame, Retract to Home.
 """
 
+import argparse
 import asyncio
 import json
-import time
-import sys
 
-WS_URL = "ws://localhost:8080/ws"
-RAW_OUT_PATH = "/home/bubble/Desktop/TestVersion1/results/triangle/raw_triangle_pressed.jpg"
+DEFAULT_WS_URL = "ws://localhost:8080/ws"
 
-async def run(target_force: float = 2.5):
+
+async def run(target_force: float = 2.5, shape: str = "triangle", out_path: str = "", ws_url: str = DEFAULT_WS_URL):
     import websockets
 
+    raw_rel_path = out_path.strip() if out_path.strip() else f"{shape}/raw_{shape}_pressed.jpg"
+
     print("=" * 70)
-    print(f"📸 PRESS & CAPTURE PURE RAW FRAME (Target Force: {target_force:.1f} N)")
+    print(f"📸 PRESS & CAPTURE PURE RAW FRAME (Shape: {shape}, Target Force: {target_force:.1f} N)")
     print("=" * 70)
 
-    async with websockets.connect(WS_URL) as ws:
+    async with websockets.connect(ws_url) as ws:
         latest_telem = {}
         latest_stepper = {}
         is_running = True
@@ -86,13 +87,13 @@ async def run(target_force: float = 2.5):
             print(f"  ⏳ Holding stable contact: F_lc = {f_held:.3f} N, ΔP = {dp_held:.2f} hPa")
             await asyncio.sleep(1.0)
 
-            print(f"[3/4] Triggering PURE RAW snapshot capture -> {RAW_OUT_PATH}...")
+            print(f"[3/4] Triggering PURE RAW snapshot capture -> {raw_rel_path}...")
             await ws.send(json.dumps({
                 "cmd": "capture_snapshot",
-                "raw_path": RAW_OUT_PATH
+                "raw_path": raw_rel_path
             }))
             await asyncio.sleep(0.8)
-            print(f"  ✅ Raw snapshot captured successfully!")
+            print("  ✅ Raw snapshot captured successfully!")
 
         finally:
             # 4. Retract to Home
@@ -110,6 +111,12 @@ async def run(target_force: float = 2.5):
         print("🎉 COMPLETE: PURE RAW PHOTO SAVED & STEPPER SAFELY HOME!")
         print("=" * 70)
 
+
 if __name__ == "__main__":
-    t_f = float(sys.argv[1]) if len(sys.argv) > 1 else 2.5
-    asyncio.run(run(t_f))
+    parser = argparse.ArgumentParser(description="Press indenter and capture unannotated raw camera frame")
+    parser.add_argument("--force", type=float, default=2.5, help="Target force in Newtons (default: 2.5)")
+    parser.add_argument("--shape", type=str, default="triangle", help="Shape folder name (default: triangle)")
+    parser.add_argument("--out", type=str, default="", help="Relative path inside results/ (optional)")
+    parser.add_argument("--ws-url", type=str, default=DEFAULT_WS_URL, help="WebSocket server URL")
+    args = parser.parse_args()
+    asyncio.run(run(args.force, args.shape, args.out, args.ws_url))

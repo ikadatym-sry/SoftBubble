@@ -1,5 +1,6 @@
 """
-Threaded Picamera2 camera capture module with fixed macro focus for Raspberry Pi Camera Module 3 NoIR.
+Threaded Picamera2 camera capture module with configurable manual focus for Raspberry Pi cameras
+(tested with Raspberry Pi Camera Module 3 Wide / imx708_wide using fixed macro LensPosition).
 """
 
 import time
@@ -63,16 +64,21 @@ class BubbleCamera:
         self.picam.configure(config)
         self.picam.start()
 
-        # Apply controls for macro focus
-        ctrls = {}
+        # Apply controls for macro focus (if supported) and frame rate
         if libcamera_controls is not None:
-            ctrls["AfMode"] = libcamera_controls.AfModeEnum.Manual
-            ctrls["LensPosition"] = float(self.lens_position)
-            # 30 FPS target
             frame_duration_us = int(1_000_000 / self.fps)
-            ctrls["FrameDurationLimits"] = (frame_duration_us, frame_duration_us)
-
-        self.picam.set_controls(ctrls)
+            try:
+                self.picam.set_controls({
+                    "AfMode": libcamera_controls.AfModeEnum.Manual,
+                    "LensPosition": float(self.lens_position),
+                    "FrameDurationLimits": (frame_duration_us, frame_duration_us),
+                })
+            except Exception as e:
+                print(f"[BubbleCamera] Manual AfMode/LensPosition unsupported ({e}); applying FrameDurationLimits only.")
+                try:
+                    self.picam.set_controls({"FrameDurationLimits": (frame_duration_us, frame_duration_us)})
+                except Exception:
+                    pass
         time.sleep(0.5)  # Allow ISP and sensor exposure to settle
 
         self._running = True

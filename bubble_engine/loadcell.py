@@ -108,7 +108,8 @@ class BubbleLoadCell:
     """
 
     DEFAULT_CALIB_PATHS = [
-        Path("/home/bubble/Desktop/Bubble/loadcell_calibration.json"),
+        Path(os.environ["BUBBLE_LOADCELL_CALIBRATION"]) if os.environ.get("BUBBLE_LOADCELL_CALIBRATION") else None,
+        Path(__file__).resolve().parent.parent / "experiments" / "loadcell_calibration.json",
         Path(__file__).resolve().parent.parent / "loadcell_calibration.json",
         Path("./loadcell_calibration.json"),
     ]
@@ -150,7 +151,7 @@ class BubbleLoadCell:
 
     def _load_calibration(self):
         for p in self.DEFAULT_CALIB_PATHS:
-            if p.exists():
+            if p is not None and p.exists():
                 try:
                     with open(p, "r", encoding="utf-8") as f:
                         data = json.load(f)
